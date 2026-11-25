@@ -177,7 +177,12 @@
     <div class="panel cuts-panel">
       <div class="project-row">
         <label for="projectName">프로젝트 이름</label>
-        <input id="projectName" type="text" maxlength="60" placeholder="예: 쇼츠 1편 · 다이아 도둑" autocomplete="off">
+        <input id="projectName" type="text" maxlength="60" placeholder="예: 쇼츠 2편 · 공항 썰" autocomplete="off">
+      </div>
+      <div class="preset-row" id="presetRow" role="group" aria-label="샘플 프리셋">
+        <span class="preset-label">샘플</span>
+        <button type="button" class="preset-btn" data-preset="sample-01">1편 · 10억 다이아</button>
+        <button type="button" class="preset-btn" data-preset="sample-02">2편 · 공항 150만</button>
       </div>
       <div class="cuts-head">
         <div>
@@ -191,12 +196,12 @@
         <p>아직 컷이 없어요.</p>
         <div class="row gap center">
           <button class="btn sm" id="btnFirstCut" type="button">＋ 첫 컷 추가</button>
-          <button class="btn ghost sm" id="btnLoadSample" type="button">샘플 1편 불러오기</button>
+          <button class="btn ghost sm" id="btnLoadSample" type="button">1편 불러오기</button>
+          <button class="btn ghost sm" id="btnLoadSample2" type="button">2편 불러오기</button>
         </div>
       </div>
       <div class="cut-list-foot">
-        <button class="btn ghost sm" id="btnLoadSample2" type="button">↺ 샘플 1편 다시 불러오기</button>
-        <span class="tiny">이미지는 컷 카드의 썸네일을 눌러 교체할 수 있어요.</span>
+        <span class="tiny">이미지는 컷 카드의 썸네일을 눌러 교체할 수 있어요. 샘플은 위에서 1편·2편을 바꿔요.</span>
       </div>
     </div>
 

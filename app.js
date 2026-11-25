@@ -56,7 +56,7 @@ const DEFAULT_OPTIONS = { kenBurns: true, resolution: '1080x1920', bgmVolume: 0.
 const STYLE_WEIGHTS = [400, 600, 700, 800, 900];
 const WEIGHT_LABEL = { 400: '보통', 600: '굵게', 700: '더 굵게', 800: '아주 굵게', 900: '최대' };
 
-const SAMPLE_CUTS = [
+const SAMPLE_01_CUTS = [
   {
     text: '10억짜리 다이아를\n현장에서 통째로 삼킨 도둑,\n과연 들켰을까요?',
     duration: 4
@@ -79,6 +79,45 @@ const SAMPLE_CUTS = [
   }
 ];
 
+const SAMPLE_02_CUTS = [
+  {
+    text: '공항에 친구 데리러 갔다가\n150만 원 물어낼 뻔한 썰',
+    duration: 4
+  },
+  {
+    text: '새벽 6시에 데리러 오라길래\n30분이나 기다렸는데 연락 두절',
+    duration: 9
+  },
+  {
+    text: '출근해야 해서 먼저 갔더니\n1시간 뒤 전화 와서 난리',
+    duration: 8
+  },
+  {
+    text: '알고 보니 친구 부부가\n날짜 착각해 놓고 적반하장',
+    duration: 9
+  },
+  {
+    text: '바로 손절하고 차단 박음\n한마디 하고 차단 vs 그냥 차단?',
+    duration: 6
+  }
+];
+
+const SAMPLES = {
+  'sample-01': {
+    id: 'sample-01',
+    name: '쇼츠 1편 · 10억 다이아를 삼킨 도둑',
+    assetDir: 'assets/sample-01',
+    cuts: SAMPLE_01_CUTS
+  },
+  'sample-02': {
+    id: 'sample-02',
+    name: '쇼츠 2편 · 공항 픽업 150만 원 썰',
+    assetDir: 'assets/sample-02',
+    cuts: SAMPLE_02_CUTS
+  }
+};
+const DEFAULT_SAMPLE_ID = 'sample-01';
+
 function newCut(partial = {}) {
   return {
     id: uid('cut'),
@@ -96,23 +135,26 @@ function isMobileView() {
   return window.matchMedia('(max-width: 980px)').matches;
 }
 
-function sampleProject() {
+function sampleProject(id = DEFAULT_SAMPLE_ID) {
+  const sample = SAMPLES[id] || SAMPLES[DEFAULT_SAMPLE_ID];
   return {
-    name: '쇼츠 1편 · 10억 다이아를 삼킨 도둑',
+    preset: sample.id,
+    name: sample.name,
     style: { ...DEFAULT_STYLE },
     options: { ...DEFAULT_OPTIONS, resolution: isMobileView() ? '720x1280' : '1080x1920' },
     tts: { voiceURI: '', rate: 1, pitch: 1 },
     bgm: null,
-    cuts: SAMPLE_CUTS.map((c, i) => newCut({
+    cuts: sample.cuts.map((c, i) => newCut({
       text: c.text,
       duration: c.duration,
-      image: { src: `assets/sample-01/cut${i + 1}.png`, name: `cut${i + 1}.png` }
+      image: { src: `${sample.assetDir}/cut${i + 1}.png`, name: `cut${i + 1}.png` }
     }))
   };
 }
 
 function blankProject() {
   return {
+    preset: null,
     name: '내 쇼츠',
     style: { ...DEFAULT_STYLE },
     options: { ...DEFAULT_OPTIONS, resolution: isMobileView() ? '720x1280' : '1080x1920' },
@@ -1419,8 +1461,17 @@ function setSegmented(el, value) {
   $$('button', el).forEach(b => b.classList.toggle('on', b.dataset.value === value));
 }
 
+function updatePresetButtons() {
+  $$('#presetRow .preset-btn').forEach(b => {
+    const on = project.preset === b.dataset.preset;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
 function syncProjectUI() {
   $('#projectName').value = project.name || '';
+  updatePresetButtons();
   $('#fontSize').value = String(project.style.fontSize);
   $('#fontSizeOut').textContent = String(project.style.fontSize);
   $('#fontWeight').value = String(project.style.weight);
@@ -1580,6 +1631,7 @@ function serializeProject() {
   return {
     v: 1,
     savedAt: Date.now(),
+    preset: project.preset || null,
     name: project.name,
     style: { ...project.style },
     options: { ...project.options },
@@ -1680,6 +1732,7 @@ function normalizeProject(raw) {
     };
   });
   return {
+    preset: ['sample-01', 'sample-02'].includes(raw.preset) ? raw.preset : null,
     name: String(raw.name || '내 쇼츠').slice(0, 60),
     style: normStyle,
     options: {
@@ -1730,6 +1783,7 @@ async function buildProjectJson() {
     format: 'shorts-maker-project',
     version: 1,
     savedAt: new Date().toISOString(),
+    preset: project.preset || null,
     name: project.name,
     style: { ...project.style },
     options: { ...project.options },
@@ -1821,6 +1875,7 @@ async function importProjectFile(file) {
   }
   if (!confirm('현재 작업을 불러온 프로젝트로 바꿀까요?')) return;
 
+  if (recorder) stopRecording();
   stopPlayback();
   stopTts();
   clearResultCard();
@@ -1957,6 +2012,7 @@ function safeName() {
 
 async function exportVideo() {
   if (exporting) return;
+  if (recorder) { toast('녹음을 먼저 멈춘 뒤 내보내 주세요.'); return; }
   if (!project.cuts.length) { toast('컷을 먼저 추가해 주세요.'); return; }
   if (!('MediaRecorder' in window)) {
     toast('이 브라우저는 영상 녹화를 지원하지 않아요. Chrome 또는 최신 Safari에서 열어 주세요.', 'error');
@@ -2157,6 +2213,7 @@ $('#btnCancelExport').addEventListener('click', () => {
    ------------------------------------------------------------ */
 function resetProject() {
   if (!confirm('현재 작업을 지우고 새로 시작할까요? 자동 저장된 내용도 사라져요.')) return;
+  if (recorder) stopRecording();
   stopPlayback();
   stopTts();
   clearResultCard();
@@ -2169,27 +2226,33 @@ function resetProject() {
   toast('새 프로젝트를 시작했어요.');
 }
 
-function loadSampleProject() {
+function loadSampleProject(id = DEFAULT_SAMPLE_ID) {
+  const sample = SAMPLES[id] || SAMPLES[DEFAULT_SAMPLE_ID];
   const hasContent = project.cuts.some(c => (c.text || '').trim() || c.image || c.audio);
-  if (hasContent && !confirm('샘플 1편으로 바꿀까요? 지금 작업은 사라져요.')) return;
+  if (hasContent && !confirm(`‘${sample.name}’ 프리셋으로 바꿀까요? 지금 작업은 사라져요.`)) return;
+  if (recorder) stopRecording();
   stopPlayback();
   stopTts();
   clearResultCard();
   clearMediaCache();
-  project = sampleProject();
+  project = sampleProject(sample.id);
   currentTime = 0;
   syncProjectUI();
   refreshVoices();
   renderCutList();
   saveNow();
-  toast('샘플 1편을 불러왔어요. 바로 재생해 보세요!');
+  toast(`${sample.id === 'sample-02' ? '2편' : '1편'} 프리셋을 불러왔어요. 바로 재생해 보세요!`);
 }
 
 $('#btnReset').addEventListener('click', resetProject);
 $('#btnAddCut').addEventListener('click', addCut);
 $('#btnFirstCut').addEventListener('click', addCut);
-$('#btnLoadSample').addEventListener('click', loadSampleProject);
-$('#btnLoadSample2').addEventListener('click', loadSampleProject);
+$('#btnLoadSample').addEventListener('click', () => loadSampleProject('sample-01'));
+$('#btnLoadSample2').addEventListener('click', () => loadSampleProject('sample-02'));
+$('#presetRow').addEventListener('click', e => {
+  const b = e.target.closest('[data-preset]');
+  if (b) loadSampleProject(b.dataset.preset);
+});
 $('#btnExportJson').addEventListener('click', exportProjectJson);
 $('#btnImport').addEventListener('click', () => $('#importJsonInput').click());
 $('#importJsonInput').addEventListener('change', e => {
