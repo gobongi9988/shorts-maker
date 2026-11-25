@@ -167,12 +167,13 @@
         <small id="aiVoiceSummary">nova · 1.05x</small>
       </summary>
       <div class="panel-body">
-        <label class="field wide">OpenAI API 키
+        <div class="field wide">
+          <span class="field-label">OpenAI API 키</span>
           <span class="key-input">
-            <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+            <input type="password" id="openaiKey" aria-label="OpenAI API 키" placeholder="sk-..." autocomplete="off" spellcheck="false">
             <button class="icon-btn key-eye" id="btnToggleKey" type="button" aria-label="키 보기" title="키 보기">👁</button>
           </span>
-        </label>
+        </div>
         <div class="row gap key-row">
           <button class="btn ghost sm" id="btnSaveKey" type="button">키 저장</button>
           <button class="btn ghost sm danger" id="btnClearKey" type="button">키 삭제</button>
