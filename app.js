@@ -120,6 +120,28 @@ const TONE_PRESETS = {
   }
 };
 
+/* OpenAI AI 성우 (TTS) */
+const OPENAI_KEY_LS = 'shorts-maker:openai-key:v1';
+const OPENAI_TTS_URL = 'https://api.openai.com/v1/audio/speech';
+const AI_VOICES = [
+  { id: 'nova', label: '여성 · 밝고 또렷한' },
+  { id: 'coral', label: '여성 · 생기있는' },
+  { id: 'sage', label: '여성 · 차분한' },
+  { id: 'shimmer', label: '여성 · 따뜻한' },
+  { id: 'alloy', label: '중성 · 차분한' },
+  { id: 'ash', label: '남성 · 깔끔한' },
+  { id: 'echo', label: '남성 · 중저음' },
+  { id: 'onyx', label: '남성 · 묵직한' },
+  { id: 'fable', label: '내레이션 · 이야기톤' },
+  { id: 'ballad', label: '남성 · 부드러운' }
+];
+const AI_VOICE_IDS = AI_VOICES.map(v => v.id);
+/* tts-1 · tts-1-hd는 지원 목소리가 적다(ballad 등은 gpt-4o-mini-tts 전용) */
+const MINI_ONLY_VOICES = ['ballad', 'verse', 'marin', 'cedar'];
+const AI_MODELS = ['tts-1', 'tts-1-hd', 'gpt-4o-mini-tts'];
+const AI_TEXT_MAX = 4096;
+const DEFAULT_AI = { voice: 'nova', speed: 1.05, model: 'tts-1', autoFit: true };
+
 function normalizeEffect(v) { return SUBTITLE_EFFECTS.includes(v) ? v : 'none'; }
 function normalizeTone(v) { return TONE_KEYS.includes(v) ? v : 'normal'; }
 function toneFor(cut) {
@@ -220,6 +242,7 @@ function sampleProject(id = DEFAULT_SAMPLE_ID) {
     style: { ...DEFAULT_STYLE },
     options: { ...DEFAULT_OPTIONS, resolution: isMobileView() ? '720x1280' : '1080x1920' },
     tts: { voiceURI: '', rate: 1, pitch: 1 },
+    aiVoice: { ...DEFAULT_AI },
     bgm: null,
     cuts: sample.cuts.map((c, i) => newCut({
       text: c.text,
@@ -236,6 +259,7 @@ function blankProject() {
     style: { ...DEFAULT_STYLE },
     options: { ...DEFAULT_OPTIONS, resolution: isMobileView() ? '720x1280' : '1080x1920' },
     tts: { voiceURI: '', rate: 1, pitch: 1 },
+    aiVoice: { ...DEFAULT_AI },
     bgm: null,
     cuts: [newCut({ duration: 3 })]
   };
@@ -1049,9 +1073,9 @@ function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes
   }
 }
 
-async function audioDuration(blob, url) {
-  // 1) audio 엘리먼트 메타데이터 (MediaRecorder webm은 Infinity인 경우가 있음)
-  const d = await new Promise(resolve => {
+function elementAudioDuration(url, timeout = 4000) {
+  // audio 엘리먼트 메타데이터 (MediaRecorder webm은 Infinity인 경우가 있음)
+  return new Promise(resolve => {
     const a = document.createElement('audio');
     a.preload = 'metadata';
     let done = false;
@@ -1059,10 +1083,12 @@ async function audioDuration(blob, url) {
     a.onloadedmetadata = () => finish(isFinite(a.duration) && a.duration > 0 ? a.duration : 0);
     a.onerror = () => finish(0);
     a.src = url;
-    setTimeout(() => finish(0), 4000);
+    try { a.load(); } catch (e) {}
+    setTimeout(() => finish(0), timeout);
   });
-  if (d > 0) return d;
-  // 2) 디코딩으로 실제 길이 측정
+}
+
+async function decodedAudioDuration(blob) {
   try {
     const ab = await blob.arrayBuffer();
     const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
@@ -1079,6 +1105,22 @@ async function audioDuration(blob, url) {
     console.warn('오디오 길이를 읽지 못했어요', e);
     return 0;
   }
+}
+
+async function audioDuration(blob, url, preferDecode = false) {
+  /* AI 성우처럼 짧은 음성은 디코딩이 가장 확실하다. 길게 잡히는 파일(BGM)은 메타데이터를 먼저 본다. */
+  if (preferDecode) {
+    const d = await decodedAudioDuration(blob);
+    if (d > 0) return d;
+    const e1 = await elementAudioDuration(url);
+    if (e1 > 0) return e1;
+    return await elementAudioDuration(url, 8000);
+  }
+  const d = await elementAudioDuration(url);
+  if (d > 0) return d;
+  const decoded = await decodedAudioDuration(blob);
+  if (decoded > 0) return decoded;
+  return await elementAudioDuration(url, 8000);
 }
 
 /* ------------------------------------------------------------
@@ -1138,6 +1180,326 @@ function stopTts() {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   ttsUtterance = null;
 }
+
+/* ------------------------------------------------------------
+   8-B. OpenAI AI 성우 (TTS API)
+   브라우저에서 api.openai.com으로 직접 호출해 MP3를 받고,
+   기존 업로드 음성과 똑같이 IndexedDB에 저장한다.
+   ------------------------------------------------------------ */
+const aiBusyCuts = new Set();      // 생성 중인 컷 id
+let aiBatch = null;                // {running, cancel, total, done, failed, controller}
+let aiProgressTimer = null;
+
+function aiSettings() {
+  const src = (project && project.aiVoice) || {};
+  return {
+    voice: AI_VOICE_IDS.includes(src.voice) ? src.voice : DEFAULT_AI.voice,
+    speed: clamp(parseFloat(src.speed) || DEFAULT_AI.speed, 0.75, 1.4),
+    model: AI_MODELS.includes(src.model) ? src.model : DEFAULT_AI.model,
+    autoFit: src.autoFit !== false
+  };
+}
+
+function getApiKey() {
+  try { return localStorage.getItem(OPENAI_KEY_LS) || ''; } catch (e) { return ''; }
+}
+/* 방금 입력한 값이 있으면 그것을, 없으면 저장해 둔 키를 쓴다. */
+function effectiveKey() {
+  const typed = ($('#openaiKey') && $('#openaiKey').value || '').trim();
+  return typed || getApiKey();
+}
+function maskKey(k) {
+  if (!k) return '';
+  return k.length <= 10 ? k.slice(0, 3) + '…' : `${k.slice(0, 3)}…${k.slice(-4)}`;
+}
+function refreshKeyUI() {
+  const stored = getApiKey();
+  const input = $('#openaiKey');
+  /* 입력 중인 값을 되돌리지 않는다. 비어 있을 때만 저장된 키를 채운다. */
+  if (input && !input.value && stored) input.value = stored;
+  const typed = ((input && input.value) || '').trim();
+  const state = $('#keyState');
+  if (!state) return;
+  if (typed && typed !== stored) {
+    state.textContent = '이번만 사용 · 계속 쓰려면 키 저장';
+    state.classList.remove('on');
+  } else if (stored) {
+    state.textContent = `브라우저에 저장됨 · ${maskKey(stored)}`;
+    state.classList.add('on');
+  } else {
+    state.textContent = '저장된 키 없음';
+    state.classList.remove('on');
+  }
+  $('#btnClearKey').disabled = !stored;
+}
+function saveApiKey() {
+  const v = ($('#openaiKey').value || '').trim();
+  if (!v) { toast('OpenAI API 키를 입력해 주세요.'); $('#openaiKey').focus(); return; }
+  try {
+    localStorage.setItem(OPENAI_KEY_LS, v);
+    refreshKeyUI();
+    toast(v.startsWith('sk-') ? 'API 키를 이 브라우저에 저장했어요.' : '키를 저장했어요. 보통 sk-로 시작해요.');
+  } catch (e) {
+    toast('키를 저장하지 못했어요: ' + (e.message || e), 'error');
+  }
+}
+function clearApiKey() {
+  try { localStorage.removeItem(OPENAI_KEY_LS); } catch (e) {}
+  $('#openaiKey').value = '';
+  refreshKeyUI();
+  toast('저장한 API 키를 지웠어요.');
+}
+
+function syncAiUI() {
+  if (!project) return;
+  const s = aiSettings();
+  const mini = s.model === 'gpt-4o-mini-tts';
+  const sel = $('#aiVoice');
+  $$('option', sel).forEach(o => { o.disabled = !!o.dataset.miniOnly && !mini; });
+  if (!mini && MINI_ONLY_VOICES.includes(s.voice)) project.aiVoice.voice = DEFAULT_AI.voice;
+  const cur = aiSettings();
+  sel.value = cur.voice;
+  $('#aiModel').value = cur.model;
+  $('#aiSpeed').value = String(cur.speed);
+  $('#aiSpeedOut').textContent = cur.speed.toFixed(2).replace(/0$/, '') + 'x';
+  $('#aiAutoFit').checked = cur.autoFit;
+  $('#aiVoiceSummary').textContent = `${cur.voice} · ${cur.speed.toFixed(2).replace(/0$/, '')}x`;
+  refreshKeyUI();
+}
+
+function buildInstructions(s) {
+  const pace = s.speed <= 0.88 ? '천천히' : s.speed <= 1.0 ? '조금 느긋하게' : s.speed <= 1.12 ? '조금 빠르게' : '빠르게';
+  const voiceDesc = (AI_VOICES.find(v => v.id === s.voice) || {}).label || '';
+  return `한국어 쇼츠 썰 영상의 내레이션입니다. ${voiceDesc} 느낌으로 ${pace} 또박또박 말해 주세요. ` +
+    '광고 톤이나 과장된 감탄은 피하고, 옆에서 이야기해 주는 듯한 자연스러운 말투로 읽어 주세요.';
+}
+
+function speechTextFor(cut) {
+  return String((cut && cut.text) || '').replace(/\s*\n+\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function aiError(code, message) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
+}
+
+async function requestSpeech(text, s, signal) {
+  const key = effectiveKey();
+  if (!key) throw aiError('no-key', 'OpenAI API 키를 먼저 입력해 주세요.');
+  if (!text) throw aiError('empty-text', '이 컷에 자막이 없어요. 자막을 먼저 입력해 주세요.');
+  if (Array.from(text).length > AI_TEXT_MAX) {
+    throw aiError('too-long', `한 컷 자막은 ${AI_TEXT_MAX}자까지 만들 수 있어요. 자막을 나눠 주세요.`);
+  }
+  const body = {
+    model: s.model,
+    voice: s.voice,
+    input: text,
+    response_format: 'mp3',
+    speed: s.speed
+  };
+  /* gpt-4o-mini-tts만 톤 지시문(instructions)을 받는다. (speed는 이 모델에서 효과가 약함) */
+  if (s.model === 'gpt-4o-mini-tts') body.instructions = buildInstructions(s);
+
+  let res;
+  try {
+    res = await fetch(OPENAI_TTS_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw err;
+    throw aiError('network', 'OpenAI 서버에 연결하지 못했어요. 네트워크와 API 키를 확인해 주세요.');
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const j = await res.json();
+      detail = (j && j.error && j.error.message) || '';
+    } catch (e) { /* JSON이 아닌 오류 응답 */ }
+    if (res.status === 401) throw aiError('auth', 'API 키가 올바르지 않아요(401). 키를 다시 확인해 주세요.');
+    if (res.status === 403) throw aiError('forbidden', '이 키로는 음성 생성 권한이 없어요(403).');
+    if (res.status === 404) throw aiError('model', '이 모델을 쓸 수 없어요(404). 모델을 바꿔 보세요.');
+    if (res.status === 429) throw aiError('quota', '요청 한도나 크레딧이 부족해요(429). 잠시 뒤 다시 시도해 주세요.');
+    if (res.status >= 500) throw aiError('server', `OpenAI 서버 오류(${res.status}). 잠시 뒤 다시 시도해 주세요.`);
+    throw aiError('bad-request', `음성을 만들지 못했어요 (${res.status})${detail ? ' · ' + detail : ''}`);
+  }
+  const raw = await res.blob();
+  if (!raw.size) throw aiError('empty', '음성이 비어 있어요. 다시 시도해 주세요.');
+  /* OpenAI는 mp3로 돌려주지만, 응답 형식을 그대로 존중해 확장자를 맞춘다. */
+  const type = raw.type && raw.type.startsWith('audio/') ? raw.type : 'audio/mpeg';
+  return { blob: new Blob([raw], { type }), ext: extForMime(type) };
+}
+
+/* 한 컷의 자막을 AI 성우 음성으로 만들어 그 컷에 장착한다. */
+async function generateCutVoice(cut, opts = {}) {
+  const s = aiSettings();
+  const text = speechTextFor(cut);
+  aiBusyCuts.add(cut.id);
+  renderCutList();
+  try {
+    const { blob, ext } = await requestSpeech(text, s, opts.signal);
+    if (s.autoFit) cut.autoFit = true;
+    const idx = project.cuts.indexOf(cut) + 1;
+    const ok = await setCutAudio(cut, blob, `AI-${s.voice}-${idx}.${ext}`);
+    if (!ok) throw aiError('save-failed', '음성을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
+    return cut;
+  } finally {
+    aiBusyCuts.delete(cut.id);
+    renderCutList();
+  }
+}
+
+async function aiVoiceForCut(cut) {
+  if (exporting) { toast('내보내는 중에는 만들 수 없어요. 끝난 뒤 다시 눌러 주세요.'); return; }
+  if (aiBusyCuts.has(cut.id)) return;
+  if (!effectiveKey()) {
+    toast('OpenAI API 키를 먼저 입력해 주세요.', 'error');
+    $('#aiVoicePanel').open = true;
+    $('#openaiKey').focus();
+    return;
+  }
+  pause();
+  stopTts();
+  try {
+    await generateCutVoice(cut);
+    const s = aiSettings();
+    const d = cut.audio && cut.audio.duration;
+    toast(`🎙️ AI 음성(${s.voice})을 넣었어요${d ? ` · ${d.toFixed(1)}초` : ''}. ▶ 로 들어보세요.`);
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    toast((e && e.message) || 'AI 음성을 만들지 못했어요.', 'error');
+  }
+}
+
+function setAiProgress(done, total, label) {
+  const box = $('#aiProgress');
+  if (!box) return;
+  clearTimeout(aiProgressTimer);
+  box.classList.remove('is-hidden');
+  $('#aiBar').style.width = Math.round(clamp(total ? done / total : 0, 0, 1) * 100) + '%';
+  $('#aiProgressText').textContent = label;
+}
+function hideAiProgress(delay = 0) {
+  clearTimeout(aiProgressTimer);
+  aiProgressTimer = setTimeout(() => {
+    const box = $('#aiProgress');
+    if (box && !(aiBatch && aiBatch.running)) box.classList.add('is-hidden');
+  }, delay);
+}
+function setAiControlsLocked(locked) {
+  ['#aiVoice', '#aiModel', '#aiSpeed', '#aiAutoFit', '#btnSaveKey', '#btnClearKey', '#openaiKey'].forEach(sel => {
+    const el = $(sel);
+    if (el) el.disabled = locked || (sel === '#btnClearKey' && !getApiKey());
+  });
+}
+
+async function aiVoiceAll() {
+  if (aiBatch && aiBatch.running) {
+    aiBatch.cancel = true;
+    try { aiBatch.controller.abort(); } catch (e) {}
+    $('#aiProgressText').textContent = '중지하는 중…';
+    return;
+  }
+  if (exporting) { toast('내보내는 중에는 만들 수 없어요. 끝난 뒤 다시 눌러 주세요.'); return; }
+  if (!effectiveKey()) {
+    toast('OpenAI API 키를 먼저 입력해 주세요.', 'error');
+    $('#aiVoicePanel').open = true;
+    $('#openaiKey').focus();
+    return;
+  }
+  const targets = project.cuts.filter(c => speechTextFor(c));
+  if (!targets.length) {
+    toast('자막이 있는 컷이 없어요. 자막을 먼저 입력해 주세요.');
+    return;
+  }
+  pause();
+  stopTts();
+  aiBatch = { running: true, cancel: false, total: targets.length, done: 0, failed: 0, controller: new AbortController() };
+  const btn = $('#btnAiAll');
+  btn.textContent = '■ 중지';
+  btn.classList.remove('primary');
+  setAiControlsLocked(true);
+  setAiProgress(0, targets.length, `0 / ${targets.length} 컷 준비 중…`);
+
+  let fatal = '';
+  for (let i = 0; i < targets.length; i++) {
+    if (aiBatch.cancel) break;
+    setAiProgress(i, targets.length, `${i + 1} / ${targets.length} 컷 생성 중…`);
+    try {
+      await generateCutVoice(targets[i], { signal: aiBatch.controller.signal });
+      aiBatch.done++;
+    } catch (e) {
+      if (e && e.name === 'AbortError') break;
+      aiBatch.failed++;
+      if (e && ['no-key', 'auth', 'quota'].includes(e.code)) { fatal = e.message; break; }
+    }
+    setAiProgress(aiBatch.done + aiBatch.failed, targets.length, `${i + 1} / ${targets.length} 컷 생성 중…`);
+  }
+
+  const { done, failed, cancel, total } = aiBatch;
+  aiBatch.running = false;
+  aiBatch = null;
+  btn.textContent = '🎙️ 전체 컷 AI 음성 한 번에 만들기';
+  btn.classList.add('primary');
+  setAiControlsLocked(false);
+
+  if (fatal) {
+    setAiProgress(done, total, `중단됨 · ${done} / ${total} 컷 완성`);
+    toast(fatal, 'error');
+  } else if (cancel) {
+    setAiProgress(done, total, `중지됨 · ${done} / ${total} 컷 완성`);
+    toast(`AI 음성 만들기를 중지했어요. ${done}컷은 완성됐어요.`);
+  } else if (failed) {
+    setAiProgress(done, total, `완료 ${done}컷 · 실패 ${failed}컷`);
+    toast(`${done}컷은 완성, ${failed}컷은 실패했어요. 다시 눌러 보세요.`, 'error');
+  } else {
+    setAiProgress(total, total, `✅ ${total}컷 AI 음성 완성`);
+    toast(`🎙️ ${total}컷 AI 음성을 모두 만들었어요. ▶ 로 들어보세요.`);
+  }
+  hideAiProgress(6000);
+}
+
+$('#btnSaveKey').addEventListener('click', saveApiKey);
+$('#btnClearKey').addEventListener('click', clearApiKey);
+$('#btnToggleKey').addEventListener('click', () => {
+  const input = $('#openaiKey');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  const btn = $('#btnToggleKey');
+  btn.textContent = show ? '🙈' : '👁';
+  btn.setAttribute('aria-label', show ? '키 가리기' : '키 보기');
+  btn.title = show ? '키 가리기' : '키 보기';
+});
+$('#openaiKey').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); saveApiKey(); }
+});
+$('#aiVoice').addEventListener('change', e => {
+  project.aiVoice.voice = AI_VOICE_IDS.includes(e.target.value) ? e.target.value : DEFAULT_AI.voice;
+  scheduleSave();
+  syncAiUI();
+});
+$('#aiModel').addEventListener('change', e => {
+  const model = AI_MODELS.includes(e.target.value) ? e.target.value : DEFAULT_AI.model;
+  if (model !== 'gpt-4o-mini-tts' && MINI_ONLY_VOICES.includes(aiSettings().voice)) {
+    toast('‘ballad’는 gpt-4o-mini-tts 전용이라 nova로 바꿨어요.');
+  }
+  project.aiVoice.model = model;
+  scheduleSave();
+  syncAiUI();
+});
+$('#aiSpeed').addEventListener('input', e => {
+  project.aiVoice.speed = clamp(parseFloat(e.target.value) || DEFAULT_AI.speed, 0.75, 1.4);
+  $('#aiSpeedOut').textContent = project.aiVoice.speed.toFixed(2).replace(/0$/, '') + 'x';
+  $('#aiVoiceSummary').textContent = `${aiSettings().voice} · ${project.aiVoice.speed.toFixed(2).replace(/0$/, '')}x`;
+  scheduleSave();
+});
+$('#aiAutoFit').addEventListener('change', e => {
+  project.aiVoice.autoFit = !!e.target.checked;
+  scheduleSave();
+});
+$('#btnAiAll').addEventListener('click', aiVoiceAll);
 
 /* ------------------------------------------------------------
    9. 컷별 마이크 녹음
@@ -1269,7 +1631,7 @@ async function setCutAudio(cut, blob, name) {
   cut.audio = { key, name: name || '음성', mime: blob.type || '', duration: 0 };
   audioBuffers.delete(key);
   const url = mediaUrl(key);
-  const dur = await audioDuration(blob, url);
+  const dur = await audioDuration(blob, url, true);
   cut.audio.duration = dur;
   if (cut.autoFit && dur > 0) {
     cut.duration = clamp(Math.round((tonalDuration(dur, cut) + 0.25) * 10) / 10, 0.5, 120);
@@ -1353,6 +1715,7 @@ function cutCardHtml(cut, index, total) {
   const st = styleFor(cut);
   const hasAudio = !!(cut.audio && cut.audio.key);
   const recording = !!(recorder && recorder.cutId === cut.id);
+  const aiBusy = aiBusyCuts.has(cut.id);
   const audioUrl = hasAudio ? mediaUrl(cut.audio.key) : null;
   const tone = normalizeTone(cut.tone);
   const toneRate = TONE_PRESETS[tone].rate;
@@ -1393,6 +1756,7 @@ function cutCardHtml(cut, index, total) {
             <button type="button" class="chip ${recording ? 'recording' : ''}" data-act="record">${recording ? '<span class="dot"></span>' : '🎙 '}${recording ? '중지' : '녹음'}</button>
             <button type="button" class="chip" data-act="uploadAudio">📁 음성 파일</button>
             <button type="button" class="chip" data-act="tts">🔈 TTS</button>
+            <button type="button" class="chip ai" data-act="aiVoice" ${aiBusy ? 'disabled' : ''} title="현재 AI 성우 설정으로 이 컷 자막을 음성으로 만들어요">${aiBusy ? '⏳ 생성 중…' : '🎙️ AI 음성'}</button>
             ${hasAudio ? '<button type="button" class="chip danger" data-act="removeAudio">음성 삭제</button>' : ''}
           </div>
           ${hasAudio ? `<audio class="cut-audio" controls preload="metadata" src="${escapeAttr(audioUrl || '')}"></audio>
@@ -1671,6 +2035,7 @@ cutListEl.addEventListener('click', e => {
     }
     case 'record': toggleRecord(cut.id); break;
     case 'tts': speakCut(cut); break;
+    case 'aiVoice': aiVoiceForCut(cut); break;
     case 'removeAudio': removeCutAudio(cut); break;
   }
 });
@@ -1751,6 +2116,7 @@ function syncProjectUI() {
   $('#ttsRateOut').textContent = Number(project.tts.rate || 1).toFixed(2).replace(/0$/, '') + 'x';
   $('#ttsPitch').value = String(project.tts.pitch || 1);
   $('#ttsPitchOut').textContent = Number(project.tts.pitch || 1).toFixed(1);
+  syncAiUI();
   renderBgmUI();
 }
 
@@ -1905,6 +2271,10 @@ function serializeProject() {
     style: { ...project.style },
     options: { ...project.options },
     tts: { ...project.tts },
+    aiVoice: { voice: project.aiVoice ? project.aiVoice.voice : DEFAULT_AI.voice,
+      speed: project.aiVoice ? project.aiVoice.speed : DEFAULT_AI.speed,
+      model: project.aiVoice ? project.aiVoice.model : DEFAULT_AI.model,
+      autoFit: !project.aiVoice || project.aiVoice.autoFit !== false },
     bgm: project.bgm ? { ...project.bgm } : null,
     cuts: project.cuts.map(c => ({
       id: c.id,
@@ -2023,6 +2393,12 @@ function normalizeProject(raw) {
       rate: clamp(parseFloat(tts.rate) || 1, 0.8, 1.5),
       pitch: clamp(parseFloat(tts.pitch) || 1, 0.5, 2)
     },
+    aiVoice: {
+      voice: AI_VOICE_IDS.includes(raw.aiVoice && raw.aiVoice.voice) ? raw.aiVoice.voice : DEFAULT_AI.voice,
+      speed: clamp(parseFloat(raw.aiVoice && raw.aiVoice.speed) || DEFAULT_AI.speed, 0.75, 1.4),
+      model: AI_MODELS.includes(raw.aiVoice && raw.aiVoice.model) ? raw.aiVoice.model : DEFAULT_AI.model,
+      autoFit: !(raw.aiVoice && raw.aiVoice.autoFit === false)
+    },
     bgm: raw.bgm && raw.bgm.key
       ? { key: raw.bgm.key, name: raw.bgm.name || '음악', mime: raw.bgm.mime || '', duration: parseFloat(raw.bgm.duration) || 0 }
       : null,
@@ -2061,6 +2437,7 @@ async function buildProjectJson() {
     style: { ...project.style },
     options: { ...project.options },
     tts: { ...project.tts },
+    aiVoice: { ...aiSettings() },
     bgm: null,
     cuts: []
   };
@@ -2223,6 +2600,7 @@ let exportFileBase = '';
 let exportRaf = 0;
 let exportTotalSeconds = 0;
 let lastResultUrl = null;
+let lastExportDiag = null;
 
 function clearResultCard() {
   const v = $('#resultVideo');
@@ -2315,6 +2693,7 @@ async function exportVideo() {
   exporting = true;
   exportCancel = false;
   exportChunks = [];
+  lastExportDiag = null;
   clearResultCard();
   $('#btnExport').disabled = true;
   document.body.classList.add('is-exporting');
@@ -2347,6 +2726,11 @@ async function exportVideo() {
         master.connect(dest);
         const audioTrack = dest.stream.getAudioTracks()[0];
         if (audioTrack) exportStream.addTrack(audioTrack);
+        lastExportDiag = {
+          mime: exportMime,
+          videoTracks: exportStream.getVideoTracks().length,
+          audioTracks: exportStream.getAudioTracks().length
+        };
       } catch (e) { console.warn('audio mix unavailable', e); }
     }
 
@@ -2604,8 +2988,10 @@ init().catch(err => {
 
 /* 테스트·디버깅용 최소 핸들 (읽기 전용) */
 window.__shortsMaker = {
-  version: '1.1.0',
+  version: '1.2.0',
   getProject: () => serializeProject(),
-  getState: () => ({ currentTime, playing, exporting, total: totalDuration(), cuts: project.cuts.length })
+  getState: () => ({ currentTime, playing, exporting, total: totalDuration(), cuts: project.cuts.length }),
+  getAiVoice: () => ({ ...aiSettings(), hasKey: !!effectiveKey(), busy: aiBusyCuts.size, batch: !!(aiBatch && aiBatch.running) }),
+  getLastExport: () => lastExportDiag
 };
 })();

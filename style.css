@@ -260,6 +260,31 @@ input[type=range]{accent-color:var(--accent)}
 }
 .tts-note b{color:#d7dce5;font-weight:700}
 
+/* ---------- AI 성우 (OpenAI) ---------- */
+.key-input{position:relative;display:flex;align-items:center}
+.key-input input[type=password],
+.key-input input[type=text]{
+  width:100%;height:34px;padding:0 36px 0 9px;
+  background:#0e1015;color:var(--text);border:1px solid #293040;border-radius:9px;
+  font-size:12.5px;letter-spacing:.04em;
+}
+.key-input input:focus{border-color:#5a5a33;outline:none}
+.key-eye{position:absolute;right:3px;top:3px}
+.key-row{margin-top:8px}
+.key-state{font-size:11px;color:var(--muted-2)}
+.key-state.on{color:#a8e6a1}
+.ai-controls{margin-top:12px}
+.ai-controls > .toggle.wide{grid-column:1 / -1}
+.ai-actions{margin-top:12px}
+.ai-actions .btn{width:100%}
+.ai-progress{margin-top:10px}
+.ai-progress .progress-track{width:100%}
+.ai-progress .tiny{margin-top:5px}
+.ai-deprecation{opacity:.85}
+.chip.ai{color:#ffe9a3;border-color:#4a4327;background:#1d1a10}
+.chip.ai:hover{background:#262112;border-color:#5d5430}
+.chip.ai[disabled]{opacity:.55;cursor:progress}
+
 /* ---------- 컷 리스트 ---------- */
 .cuts-panel{padding:13px}
 .project-row{display:flex;align-items:center;gap:9px;margin-bottom:11px}

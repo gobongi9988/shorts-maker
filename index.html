@@ -157,7 +157,66 @@
         <div class="row gap">
           <button class="btn ghost sm" id="btnTtsStop" type="button">■ 정지</button>
         </div>
-        <p class="tts-note">기기(아이폰·PC)에 설치된 한국어 음성이 표시됩니다. 영상 파일에 소리를 구우려면 아래 컷별 <b>녹음</b> 또는 <b>음성 파일</b>을 사용해 주세요.</p>
+        <p class="tts-note">기기(아이폰·PC)에 설치된 한국어 음성이 표시됩니다. 영상 파일에 소리를 구우려면 아래 컷별 <b>녹음</b>·<b>음성 파일</b> 또는 <b>🎙️ AI 성우</b>를 사용해 주세요.</p>
+      </div>
+    </details>
+
+    <details class="panel" id="aiVoicePanel">
+      <summary>
+        <span class="summary-title">🎙️ AI 성우 목소리 생성 (OpenAI)</span>
+        <small id="aiVoiceSummary">nova · 1.05x</small>
+      </summary>
+      <div class="panel-body">
+        <label class="field wide">OpenAI API 키
+          <span class="key-input">
+            <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+            <button class="icon-btn key-eye" id="btnToggleKey" type="button" aria-label="키 보기" title="키 보기">👁</button>
+          </span>
+        </label>
+        <div class="row gap key-row">
+          <button class="btn ghost sm" id="btnSaveKey" type="button">키 저장</button>
+          <button class="btn ghost sm danger" id="btnClearKey" type="button">키 삭제</button>
+          <span class="key-state" id="keyState">저장된 키 없음</span>
+        </div>
+        <p class="tiny">입력한 키는 <b>내 브라우저(localStorage)에만</b> 저장되고, 음성을 만들 때 OpenAI(api.openai.com)로만 전송돼요. 공용 PC에서는 저장하지 마세요.</p>
+
+        <div class="control-grid ai-controls">
+          <label class="field wide">AI 성우
+            <select id="aiVoice">
+              <option value="nova">nova · 여성 · 밝고 또렷한 (기본)</option>
+              <option value="coral">coral · 여성 · 생기있는</option>
+              <option value="sage">sage · 여성 · 차분한</option>
+              <option value="shimmer">shimmer · 여성 · 따뜻한</option>
+              <option value="alloy">alloy · 중성 · 차분한</option>
+              <option value="ash">ash · 남성 · 깔끔한</option>
+              <option value="echo">echo · 남성 · 중저음</option>
+              <option value="onyx">onyx · 남성 · 묵직한</option>
+              <option value="fable">fable · 내레이션 · 이야기톤</option>
+              <option value="ballad" data-mini-only="1">ballad · 남성 · 부드러운 (gpt-4o-mini-tts 전용)</option>
+            </select>
+          </label>
+          <label class="field">말하기 속도 <output id="aiSpeedOut" for="aiSpeed">1.05x</output>
+            <input type="range" id="aiSpeed" min="0.75" max="1.4" step="0.05" value="1.05">
+          </label>
+          <label class="field">모델
+            <select id="aiModel">
+              <option value="tts-1">tts-1 · 빠름·저렴</option>
+              <option value="tts-1-hd">tts-1-hd · 고음질</option>
+              <option value="gpt-4o-mini-tts">gpt-4o-mini-tts · 최신·톤 지시문</option>
+            </select>
+          </label>
+          <label class="toggle small wide"><input type="checkbox" id="aiAutoFit" checked><span>생성한 음성 길이에 컷 재생 시간 맞추기</span></label>
+        </div>
+
+        <div class="row gap ai-actions">
+          <button class="btn primary sm" id="btnAiAll" type="button">🎙️ 전체 컷 AI 음성 한 번에 만들기</button>
+        </div>
+        <div class="ai-progress is-hidden" id="aiProgress" role="status" aria-live="polite">
+          <div class="progress-track"><div id="aiBar" class="progress-bar"></div></div>
+          <span class="tiny" id="aiProgressText"></span>
+        </div>
+        <p class="tiny" id="aiHint">컷 카드의 <b>🎙️ AI 음성</b> 버튼으로 한 컷만 만들 수도 있어요. 만든 음성은 다른 음성처럼 IndexedDB에 저장돼 새로고침해도 남고, <b>▶ 재생</b>과 <b>영상 내보내기</b>에 그대로 들어가요.</p>
+        <p class="tiny ai-deprecation">참고: OpenAI가 <b>tts-1 · tts-1-hd · gpt-4o-mini-tts</b> 모델을 2027-01-06에 종료할 예정이에요. 그 전까지는 지금처럼 동작해요.</p>
       </div>
     </details>
 
@@ -220,7 +279,7 @@
       <div class="panel-body help-body">
         <ol>
           <li><b>컷 카드</b>에서 이미지를 넣고, 자막·재생 시간을 맞춰요.</li>
-          <li>목소리는 <b>TTS로 미리 들어보고</b>, 영상에 담을 땐 <b>마이크 녹음</b>이나 <b>음성 파일 업로드</b>를 써요.</li>
+          <li>목소리는 <b>TTS로 미리 들어보고</b>, 영상에 담을 땐 <b>마이크 녹음</b>·<b>음성 파일 업로드</b>·<b>🎙️ AI 성우(OpenAI)</b>를 써요.</li>
           <li><b>BGM</b>을 넣고 볼륨을 맞춰요.</li>
           <li><b>영상으로 내보내기</b>를 누르면 실제 재생 시간만큼 녹화돼요. 녹화 중에는 화면을 벗어나거나 잠그지 마세요.</li>
         </ol>
