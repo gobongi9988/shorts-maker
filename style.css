@@ -253,6 +253,12 @@ input[type=range]{accent-color:var(--accent)}
 
 .tiny{font-size:11.5px;line-height:1.6;color:var(--muted-2);margin:9px 0 0}
 .tiny b{color:#b9c0cc;font-weight:600}
+.tts-note{
+  font-size:11.5px;line-height:1.6;color:var(--muted-2);margin:10px 0 0;
+  padding:8px 10px;border-left:2px solid #3b3a26;background:#101218;
+  border-radius:0 8px 8px 0;
+}
+.tts-note b{color:#d7dce5;font-weight:700}
 
 /* ---------- 컷 리스트 ---------- */
 .cuts-panel{padding:13px}
@@ -357,6 +363,11 @@ input[type=range]{accent-color:var(--accent)}
 .cut-audio{width:100%;height:30px;margin-top:6px;display:block}
 .audio-state{font-size:10.5px;color:var(--muted-2);margin-top:5px;line-height:1.4}
 .audio-state b{color:#c8cfda;font-weight:600}
+.tone-row{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+.tone-label{font-size:10.5px;color:var(--muted-2);flex:none}
+.tone-chips{display:flex;gap:4px;flex-wrap:wrap}
+.tone-chip{height:24px;padding:0 7px;font-size:10.5px;border-radius:6px}
+.tone-chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:800}
 
 .cut-style{margin-top:8px;border-top:1px dashed #222733;padding-top:7px}
 .cut-style > summary{

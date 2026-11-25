@@ -51,10 +51,86 @@ const MINI_H = 256;
 const FONT_STACK = "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif";
 const LS_KEY = 'shorts-maker:project:v1';
 const DB_NAME = 'shorts-maker-media';
-const DEFAULT_STYLE = { fontSize: 56, position: 'bottom', bg: 'dark', weight: 800 };
+const DEFAULT_STYLE = { fontSize: 56, position: 'bottom', bg: 'dark', weight: 800, effect: 'none' };
 const DEFAULT_OPTIONS = { kenBurns: true, resolution: '1080x1920', bgmVolume: 0.18, voiceVolume: 1 };
 const STYLE_WEIGHTS = [400, 600, 700, 800, 900];
 const WEIGHT_LABEL = { 400: '보통', 600: '굵게', 700: '더 굵게', 800: '아주 굵게', 900: '최대' };
+
+/* 자막 등장 애니메이션 6종 */
+const SUBTITLE_EFFECTS = ['none', 'pop', 'typing', 'highlight', 'slideUp', 'punch'];
+const EFFECT_LABEL = {
+  none: '고정',
+  pop: '팝업 통통',
+  typing: '타자기',
+  highlight: '단어 강조',
+  slideUp: '슬라이드 업',
+  punch: '펀치 강조'
+};
+const EFFECT_DESC = {
+  none: '효과 없이 그대로 표시',
+  pop: '통통 튀어오르며 등장',
+  typing: '한 글자씩 타다닥',
+  highlight: '단어가 순서대로 형광 강조',
+  slideUp: '아래에서 부드럽게 올라오며 페이드인',
+  punch: '착 달라붙는 강조 + 미세한 흔들림'
+};
+
+/* 목소리 톤 변조 프리셋 (재생 속도 + 이퀄라이저) */
+const TONE_KEYS = ['normal', 'bright', 'deep', 'chipmunk', 'radio'];
+const TONE_LABEL = {
+  normal: '원본',
+  bright: '하이톤',
+  deep: '중저음',
+  chipmunk: '다람쥐',
+  radio: '라디오'
+};
+const TONE_DESC = {
+  normal: '변조 없이 원본 그대로',
+  bright: '높고 또렷한 썰톤 (속도 1.15배 + 고음 부스트)',
+  deep: '낮고 묵직한 내레이션 (속도 0.88배 + 저음 부스트)',
+  chipmunk: '빠르고 귀여운 다람쥐 톤 (속도 1.38배)',
+  radio: '라디오·전화 통화 질감 (350~3,000Hz 대역만 통과)'
+};
+const TONE_PRESETS = {
+  normal: { rate: 1, filters: [] },
+  bright: {
+    rate: 1.15,
+    filters: [
+      { type: 'highshelf', freq: 3200, gain: 6 },
+      { type: 'peaking', freq: 2400, gain: 2.5, q: 1 },
+      { type: 'highpass', freq: 110 }
+    ]
+  },
+  deep: {
+    rate: 0.88,
+    filters: [
+      { type: 'lowshelf', freq: 330, gain: 6 },
+      { type: 'peaking', freq: 140, gain: 3, q: 1 },
+      { type: 'lowpass', freq: 7200 }
+    ]
+  },
+  chipmunk: { rate: 1.38, filters: [] },
+  radio: {
+    rate: 1,
+    filters: [
+      { type: 'highpass', freq: 350 },
+      { type: 'lowpass', freq: 3000 },
+      { type: 'peaking', freq: 1700, gain: 4, q: 0.9 }
+    ]
+  }
+};
+
+function normalizeEffect(v) { return SUBTITLE_EFFECTS.includes(v) ? v : 'none'; }
+function normalizeTone(v) { return TONE_KEYS.includes(v) ? v : 'normal'; }
+function toneFor(cut) {
+  return TONE_PRESETS[normalizeTone(cut && cut.tone)] || TONE_PRESETS.normal;
+}
+/* 톤 변조 후 실제 타임라인에서 차지하는 길이 */
+function tonalDuration(rawSeconds, cut) {
+  const d = Math.max(0, Number(rawSeconds) || 0);
+  return d / toneFor(cut).rate;
+}
+const easeOutCubic = u => 1 - Math.pow(1 - u, 3);
 
 const SAMPLE_01_CUTS = [
   {
@@ -126,6 +202,7 @@ function newCut(partial = {}) {
     autoFit: true,
     image: null,
     audio: null,
+    tone: 'normal',
     style: null,
     ...partial
   };
@@ -505,21 +582,64 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-function drawSubtitle(ctx, cut, W, H) {
-  const text = (cut && cut.text ? cut.text : '').trim();
-  if (!text) return;
+function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
+  const fullText = (cut && cut.text ? cut.text : '').trim();
+  if (!fullText) return;
   const st = styleFor(cut);
+  const effect = normalizeEffect(st.effect);
   const scale = W / DESIGN_W;
   const fontSize = Math.max(8, st.fontSize * scale);
   const weight = STYLE_WEIGHTS.includes(Number(st.weight)) ? Number(st.weight) : 800;
   const maxWidth = W * 0.88;
+  const t = Math.max(0, Number(localTime) || 0);
+  const dur = Math.max(0.2, Number(cutDuration) || 0.2);
+
+  /* --- 효과별 등장 파라미터 (미리보기·내보내기 공통, 컷 안의 경과 시간 기준) --- */
+  let alpha = 1, kScale = 1, dx = 0, dy = 0;
+  let drawText = fullText;
+  let hlCount = -1;          // highlight: 앞에서 몇 개 단어까지 강조할지
+
+  if (effect === 'pop') {
+    // 0.3초 동안 0.65 → 1.08 → 1.0 탄성 바운스
+    const k = clamp(t / 0.3, 0, 1);
+    alpha = clamp(t / 0.1, 0, 1);
+    kScale = k < 0.6
+      ? 0.65 + 0.43 * easeOutCubic(k / 0.6)
+      : 1.08 - 0.08 * easeOutCubic((k - 0.6) / 0.4);
+  } else if (effect === 'slideUp') {
+    // 아래에서 28px 올라오며 페이드인
+    const k = easeOutCubic(clamp(t / 0.35, 0, 1));
+    alpha = k;
+    dy = (1 - k) * 28 * scale;
+  } else if (effect === 'punch') {
+    // 살짝 커졌다가 착 붙고, 컷 시작에 미세한 흔들림
+    const k = clamp(t / 0.18, 0, 1);
+    kScale = 1.08 - 0.08 * easeOutCubic(k);
+    alpha = clamp(t / 0.08, 0, 1);
+    const shake = t < 0.3 ? 1 - t / 0.3 : 0;
+    dx = Math.sin(t * 78) * 5 * scale * shake;
+    dy = Math.cos(t * 63) * 2 * scale * shake;
+  } else if (effect === 'typing') {
+    // 컷 앞부분에서 한 글자씩 (10~45자/초)
+    const chars = Array.from(fullText);
+    const cps = clamp(chars.length / Math.max(0.8, dur * 0.45), 10, 45);
+    const n = Math.floor(t * cps);
+    if (n <= 0) return;
+    drawText = chars.slice(0, n).join('');
+  } else if (effect === 'highlight') {
+    // 컷이 흐르는 동안 단어가 순서대로 형광 강조
+    const words = fullText.split(/\s+/).filter(Boolean).length;
+    const k = clamp((t - 0.1) / Math.max(0.6, dur * 0.75), 0, 1);
+    hlCount = Math.ceil(k * words);
+  }
 
   ctx.save();
   ctx.font = `${weight} ${fontSize}px ${FONT_STACK}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  if (alpha < 1) ctx.globalAlpha = alpha;
 
-  const lines = wrapText(ctx, text, maxWidth);
+  const lines = wrapText(ctx, drawText, maxWidth);
   const lh = fontSize * 1.34;
   const blockH = lines.length * lh;
   let top;
@@ -530,9 +650,19 @@ function drawSubtitle(ctx, cut, W, H) {
 
   const padX = fontSize * 0.46;
   const padY = fontSize * 0.2;
+  const isBox = st.bg === 'dark' || st.bg === 'light';
+  const baseColor = isBox ? (st.bg === 'dark' ? '#ffffff' : '#111318') : '#ffffff';
+
+  /* 확대·이동은 자막 덩어리 중심을 기준으로 적용 */
+  if (kScale !== 1 || dx || dy) {
+    const cy = top + blockH / 2;
+    ctx.translate(W / 2 + dx, cy + dy);
+    ctx.scale(kScale, kScale);
+    ctx.translate(-W / 2, -cy);
+  }
 
   // 배경 박스는 줄마다 따로 그리지 않고 한 덩어리로 그려 깔끔하게 유지한다.
-  if (st.bg === 'dark' || st.bg === 'light') {
+  if (isBox) {
     let maxLineW = 0;
     for (const line of lines) maxLineW = Math.max(maxLineW, ctx.measureText(line || ' ').width);
     const boxW = Math.min(maxLineW + padX * 2, maxWidth + padX * 2);
@@ -540,25 +670,68 @@ function drawSubtitle(ctx, cut, W, H) {
     ctx.fillStyle = st.bg === 'dark' ? 'rgba(8,9,12,0.68)' : 'rgba(255,255,255,0.93)';
     roundRect(ctx, W / 2 - boxW / 2, top - padY, boxW, boxH, fontSize * 0.22);
     ctx.fill();
-    ctx.fillStyle = st.bg === 'dark' ? '#ffffff' : '#111318';
   } else {
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
     ctx.strokeStyle = 'rgba(0,0,0,.86)';
     ctx.lineWidth = Math.max(2, fontSize * 0.16);
-    ctx.fillStyle = '#ffffff';
   }
+  ctx.fillStyle = baseColor;
 
-  lines.forEach((line, i) => {
-    const y = top + i * lh + lh / 2;
-    if (!line) return;
-    if (st.bg === 'dark' || st.bg === 'light') {
-      ctx.fillText(line, W / 2, y, maxWidth);
-    } else {
-      ctx.strokeText(line, W / 2, y, maxWidth);
-      ctx.fillText(line, W / 2, y, maxWidth);
-    }
-  });
+  if (effect === 'highlight') {
+    // 단어 단위로 배치해 강조된 단어만 형광색/형광펜으로 그린다.
+    const spaceW = ctx.measureText(' ').width;
+    let wordIndex = 0;
+    lines.forEach((line, i) => {
+      if (!line) return;
+      const y = top + i * lh + lh / 2;
+      const words = line.split(/\s+/).filter(Boolean);
+      const widths = words.map(w => ctx.measureText(w).width);
+      const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, words.length - 1);
+      let x = W / 2 - totalW / 2;
+      words.forEach((word, j) => {
+        const active = wordIndex + j < hlCount;
+        const cw = widths[j];
+        const cx = x + cw / 2;
+        if (active) {
+          if (st.bg === 'light') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,225,77,.95)';
+            roundRect(ctx, x - fontSize * 0.07, y - fontSize * 0.62, cw + fontSize * 0.14, fontSize * 1.24, fontSize * 0.15);
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = '#141414';
+            ctx.fillText(word, cx, y, maxWidth);
+          } else {
+            ctx.save();
+            ctx.shadowColor = 'rgba(255,214,51,.7)';
+            ctx.shadowBlur = fontSize * 0.4;
+            ctx.fillStyle = '#ffe14d';
+            if (!isBox) ctx.strokeText(word, cx, y, maxWidth);
+            ctx.fillText(word, cx, y, maxWidth);
+            ctx.restore();
+          }
+        } else {
+          ctx.fillStyle = baseColor;
+          if (!isBox) ctx.strokeText(word, cx, y, maxWidth);
+          ctx.fillText(word, cx, y, maxWidth);
+        }
+        x += cw + spaceW;
+      });
+      wordIndex += words.length;
+    });
+  } else {
+    lines.forEach((line, i) => {
+      const y = top + i * lh + lh / 2;
+      if (!line) return;
+      if (isBox) {
+        ctx.fillText(line, W / 2, y, maxWidth);
+      } else {
+        ctx.strokeText(line, W / 2, y, maxWidth);
+        ctx.fillText(line, W / 2, y, maxWidth);
+      }
+    });
+  }
   ctx.restore();
 }
 
@@ -599,7 +772,7 @@ function drawFrame(t, ctx, W, H) {
     drawImagePlaceholder(ctx, W, H);
   }
 
-  drawSubtitle(ctx, cut, W, H);
+  drawSubtitle(ctx, cut, W, H, pos.local, Math.max(0.5, Number(cut.duration) || 0.5));
   ctx.restore();
 }
 
@@ -804,6 +977,23 @@ function stopAudioSources() {
   previewBgmGain = null;
 }
 
+/* 톤 프리셋의 필터 체인을 소스에 연결하고 마지막 노드를 돌려준다. */
+function attachToneChain(ctx, src, tone) {
+  let node = src;
+  for (const f of tone.filters || []) {
+    try {
+      const bq = ctx.createBiquadFilter();
+      bq.type = f.type;
+      bq.frequency.value = f.freq;
+      if (f.gain != null) bq.gain.value = f.gain;
+      if (f.q != null) bq.Q.value = f.q;
+      node.connect(bq);
+      node = bq;
+    } catch (e) { console.warn('톤 필터를 만들지 못했어요', e); }
+  }
+  return node;
+}
+
 function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes = activeSources) {
   const cuts = project.cuts;
   const lead = 0.06;
@@ -814,19 +1004,24 @@ function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes
     const dur = Math.max(0.5, Number(cut.duration) || 0.5);
     if (cut.audio && cut.audio.key) {
       const buf = buffers.get(cut.audio.key);
-      if (buf && acc + dur > fromTime) {
+      const tone = toneFor(cut);
+      // 톤(배속)이 적용된 뒤 타임라인에서 차지하는 길이
+      const clipDur = buf ? buf.duration / tone.rate : 0;
+      if (buf && acc + dur > fromTime && clipDur > 0) {
         const offset = Math.max(0, fromTime - acc);
-        if (offset < buf.duration) {
+        if (offset < clipDur) {
           try {
             const src = ctx.createBufferSource();
             src.buffer = buf;
+            src.playbackRate.value = tone.rate;
             const gain = ctx.createGain();
             gain.gain.value = clamp(project.options.voiceVolume ?? 1, 0, 1);
-            src.connect(gain).connect(destination);
+            attachToneChain(ctx, src, tone).connect(gain).connect(destination);
             // 컷 길이를 넘어 다음 컷으로 소리가 새지 않도록 잘라서 재생한다.
+            // start()의 offset/duration은 버퍼 시간 기준이므로 배속을 곱해 환산한다.
             const remainingInCut = dur - offset;
-            const playDur = Math.max(0.02, Math.min(buf.duration - offset, remainingInCut));
-            src.start(now + Math.max(0, acc - fromTime), offset, playDur);
+            const playDur = Math.max(0.02, Math.min(clipDur - offset, remainingInCut));
+            src.start(now + Math.max(0, acc - fromTime), offset * tone.rate, playDur * tone.rate);
             nodes.push(src);
           } catch (e) { console.warn('음성 재생 실패', e); }
         }
@@ -1077,7 +1272,7 @@ async function setCutAudio(cut, blob, name) {
   const dur = await audioDuration(blob, url);
   cut.audio.duration = dur;
   if (cut.autoFit && dur > 0) {
-    cut.duration = clamp(Math.round((dur + 0.25) * 10) / 10, 0.5, 120);
+    cut.duration = clamp(Math.round((tonalDuration(dur, cut) + 0.25) * 10) / 10, 0.5, 120);
   }
   scheduleSave();
   recalcTimeline();
@@ -1114,6 +1309,36 @@ function removeCutAudio(cut) {
   toast('이 컷의 음성을 지웠어요.');
 }
 
+/* 목소리 톤 바꾸기 — 미리듣기·자동 길이 맞추기에 바로 반영 */
+function setCutTone(cut, tone) {
+  const next = normalizeTone(tone);
+  if (normalizeTone(cut.tone) === next) return;
+  cut.tone = next;
+  if (cut.autoFit && cut.audio && cut.audio.duration > 0) {
+    cut.duration = clamp(Math.round((tonalDuration(cut.audio.duration, cut) + 0.25) * 10) / 10, 0.5, 120);
+  }
+  scheduleSave();
+  renderCutList();
+  toast(`목소리 톤 · ${TONE_LABEL[next]}`);
+}
+
+/* 컷 카드의 <audio> 미리듣기에도 변조 속도·피치를 반영 */
+function applyToneToPlayer(el, cut) {
+  if (!el || !cut) return;
+  const rate = toneFor(cut).rate;
+  const apply = () => {
+    try {
+      el.preservesPitch = false;
+      el.mozPreservesPitch = false;
+      el.webkitPreservesPitch = false;
+    } catch (e) {}
+    try { el.playbackRate = rate; } catch (e) {}
+  };
+  apply();
+  el.addEventListener('loadedmetadata', apply, { once: true });
+  el.addEventListener('play', apply, { once: true });
+}
+
 /* ------------------------------------------------------------
    10. 컷 리스트 UI
    ------------------------------------------------------------ */
@@ -1129,6 +1354,10 @@ function cutCardHtml(cut, index, total) {
   const hasAudio = !!(cut.audio && cut.audio.key);
   const recording = !!(recorder && recorder.cutId === cut.id);
   const audioUrl = hasAudio ? mediaUrl(cut.audio.key) : null;
+  const tone = normalizeTone(cut.tone);
+  const toneRate = TONE_PRESETS[tone].rate;
+  const rawDur = hasAudio && cut.audio.duration ? cut.audio.duration : 0;
+  const effDur = rawDur / toneRate;
   const num = index + 1;
 
   const seg = (field, opts, current) => `
@@ -1167,7 +1396,13 @@ function cutCardHtml(cut, index, total) {
             ${hasAudio ? '<button type="button" class="chip danger" data-act="removeAudio">음성 삭제</button>' : ''}
           </div>
           ${hasAudio ? `<audio class="cut-audio" controls preload="metadata" src="${escapeAttr(audioUrl || '')}"></audio>
-            <div class="audio-state"><b>${escapeHtml(cut.audio.name || '음성')}</b>${cut.audio.duration ? ` · ${cut.audio.duration.toFixed(1)}초` : ''}</div>` : ''}
+            <div class="tone-row">
+              <span class="tone-label">🎚 목소리 톤</span>
+              <div class="tone-chips" role="group" aria-label="목소리 톤 변조">
+                ${TONE_KEYS.map(k => `<button type="button" class="chip tone-chip ${tone === k ? 'on' : ''}" data-tone="${k}" title="${escapeAttr(TONE_DESC[k])}" aria-pressed="${tone === k ? 'true' : 'false'}">${TONE_LABEL[k]}</button>`).join('')}
+              </div>
+            </div>
+            <div class="audio-state"><b>${escapeHtml(cut.audio.name || '음성')}</b>${rawDur ? ` · ${rawDur.toFixed(1)}초` : ''}${rawDur && toneRate !== 1 ? ` → 변조 후 ${effDur.toFixed(1)}초` : ''}</div>` : ''}
           <label class="toggle small"><input type="checkbox" data-field="autoFit" ${cut.autoFit ? 'checked' : ''}><span>음성 길이에 맞추기</span></label>
           <input type="file" data-field="imageFile" accept="image/*" hidden>
           <input type="file" data-field="audioFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
@@ -1191,6 +1426,11 @@ function cutCardHtml(cut, index, total) {
               <div class="field"><span class="field-label">배경</span>
                 ${seg('bg', [['dark', '검정'], ['light', '흰색'], ['none', '없음']], st.bg)}
               </div>
+              <label class="field wide">자막 효과
+                <select data-style="effect">
+                  ${SUBTITLE_EFFECTS.map(v => `<option value="${v}" title="${escapeAttr(EFFECT_DESC[v])}" ${normalizeEffect(st.effect) === v ? 'selected' : ''}>${EFFECT_LABEL[v]}</option>`).join('')}
+                </select>
+              </label>
             </div>
           </div>
         </details>
@@ -1217,6 +1457,10 @@ function renderCutList() {
   });
   cutListEl.replaceChildren(frag);
   $$('.cut-textarea', cutListEl).forEach(autoGrowTextarea);
+  $$('.cut-audio', cutListEl).forEach(el => {
+    const card = el.closest('.cut-card');
+    applyToneToPlayer(el, card ? findCut(card.dataset.id) : null);
+  });
   $('#emptyCuts').classList.toggle('is-hidden', project.cuts.length > 0);
   recalcTimeline();
 }
@@ -1301,7 +1545,11 @@ cutListEl.addEventListener('input', e => {
   if (el.dataset.style) {
     if (!cut.style) return;
     const key = el.dataset.style;
-    const val = key === 'fontSize' ? clamp(parseInt(el.value) || 56, 32, 110) : Number(el.value) || 700;
+    const val = key === 'fontSize'
+      ? clamp(parseInt(el.value) || 56, 32, 110)
+      : key === 'effect'
+        ? normalizeEffect(el.value)
+        : Number(el.value) || 700;
     cut.style[key] = val;
     const out = $('[data-style-out]', card);
     if (out && key === 'fontSize') out.textContent = val;
@@ -1320,7 +1568,7 @@ cutListEl.addEventListener('change', e => {
   if (el.dataset.field === 'autoFit') {
     cut.autoFit = !!el.checked;
     if (cut.autoFit && cut.audio && cut.audio.duration > 0) {
-      cut.duration = clamp(Math.round((cut.audio.duration + 0.25) * 10) / 10, 0.5, 120);
+      cut.duration = clamp(Math.round((tonalDuration(cut.audio.duration, cut) + 0.25) * 10) / 10, 0.5, 120);
       renderCutList();
     }
     scheduleSave();
@@ -1345,13 +1593,21 @@ cutListEl.addEventListener('change', e => {
     if (!playing) drawAll(currentTime);
     return;
   }
+  if (el.dataset.style === 'effect') {
+    if (!cut.style) return;
+    cut.style.effect = normalizeEffect(el.value);
+    scheduleSave();
+    if (!playing) drawAll(currentTime);
+    return;
+  }
   if (el.hasAttribute('data-style-enable')) {
     if (el.checked) {
       cut.style = {
         fontSize: project.style.fontSize,
         position: project.style.position,
         bg: project.style.bg,
-        weight: project.style.weight
+        weight: project.style.weight,
+        effect: normalizeEffect(project.style.effect)
       };
     } else {
       cut.style = null;
@@ -1386,6 +1642,12 @@ cutListEl.addEventListener('click', e => {
 
   const actEl = e.target.closest('[data-act]');
   if (!actEl) {
+    // 목소리 톤 칩
+    const toneBtn = e.target.closest('[data-tone]');
+    if (toneBtn) {
+      setCutTone(cut, toneBtn.dataset.tone);
+      return;
+    }
     // 썸네일 안의 이미지를 눌러도 이미지 교체
     if (e.target.closest('.cut-thumb')) {
       const fi = $('[data-field="imageFile"]', card);
@@ -1477,6 +1739,7 @@ function syncProjectUI() {
   $('#fontWeight').value = String(project.style.weight);
   setSegmented($('#posSeg'), project.style.position);
   setSegmented($('#bgSeg'), project.style.bg);
+  $('#effectSelect').value = normalizeEffect(project.style.effect);
   $('#kenBurns').checked = !!project.options.kenBurns;
   $('#resSelect').value = project.options.resolution || '1080x1920';
   $('#stageRes').textContent = (project.options.resolution || '1080x1920').replace('x', '×');
@@ -1517,6 +1780,12 @@ $('#bgSeg').addEventListener('click', e => {
   setSegmented($('#bgSeg'), project.style.bg);
   scheduleSave();
   if (!playing) drawAll(currentTime);
+});
+$('#effectSelect').addEventListener('change', e => {
+  project.style.effect = normalizeEffect(e.target.value);
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+  toast(`자막 효과 · ${EFFECT_LABEL[project.style.effect]}`);
 });
 $('#kenBurns').addEventListener('change', e => {
   project.options.kenBurns = !!e.target.checked;
@@ -1644,6 +1913,7 @@ function serializeProject() {
       autoFit: c.autoFit,
       image: c.image ? { ...c.image } : null,
       audio: c.audio ? { ...c.audio } : null,
+      tone: normalizeTone(c.tone),
       style: c.style ? { ...c.style } : null
     }))
   };
@@ -1705,7 +1975,8 @@ function normalizeProject(raw) {
     fontSize: clamp(parseInt(style.fontSize) || DEFAULT_STYLE.fontSize, 32, 110),
     position: ['top', 'center', 'bottom'].includes(style.position) ? style.position : DEFAULT_STYLE.position,
     bg: ['dark', 'light', 'none'].includes(style.bg) ? style.bg : DEFAULT_STYLE.bg,
-    weight: STYLE_WEIGHTS.includes(Number(style.weight)) ? Number(style.weight) : DEFAULT_STYLE.weight
+    weight: STYLE_WEIGHTS.includes(Number(style.weight)) ? Number(style.weight) : DEFAULT_STYLE.weight,
+    effect: normalizeEffect(style.effect)
   };
   const cuts = (Array.isArray(raw.cuts) ? raw.cuts : []).map(c => {
     let st = null;
@@ -1714,7 +1985,8 @@ function normalizeProject(raw) {
         fontSize: clamp(parseInt(c.style.fontSize) || normStyle.fontSize, 32, 110),
         position: ['top', 'center', 'bottom'].includes(c.style.position) ? c.style.position : normStyle.position,
         bg: ['dark', 'light', 'none'].includes(c.style.bg) ? c.style.bg : normStyle.bg,
-        weight: STYLE_WEIGHTS.includes(Number(c.style.weight)) ? Number(c.style.weight) : normStyle.weight
+        weight: STYLE_WEIGHTS.includes(Number(c.style.weight)) ? Number(c.style.weight) : normStyle.weight,
+        effect: normalizeEffect(c.style.effect)
       };
     }
     return {
@@ -1722,6 +1994,7 @@ function normalizeProject(raw) {
       text: typeof c.text === 'string' ? c.text : '',
       duration: clamp(parseFloat(c.duration) || 3, 0.5, 120),
       autoFit: c.autoFit !== false,
+      tone: normalizeTone(c.tone),
       image: c.image && (c.image.src || c.image.key)
         ? { src: c.image.src || undefined, key: c.image.key || undefined, name: c.image.name || '' }
         : null,
@@ -1796,6 +2069,7 @@ async function buildProjectJson() {
       text: cut.text,
       duration: cut.duration,
       autoFit: cut.autoFit,
+      tone: normalizeTone(cut.tone),
       style: cut.style ? { ...cut.style } : null,
       image: null,
       audio: null
@@ -2330,7 +2604,7 @@ init().catch(err => {
 
 /* 테스트·디버깅용 최소 핸들 (읽기 전용) */
 window.__shortsMaker = {
-  version: '1.0.0',
+  version: '1.1.0',
   getProject: () => serializeProject(),
   getState: () => ({ currentTime, playing, exporting, total: totalDuration(), cuts: project.cuts.length })
 };
