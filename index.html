@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>쇼츠 메이커 · 9:16 세로 영상 스튜디오</title>
+<meta name="description" content="이미지·자막·목소리·BGM을 합쳐 9:16 쇼츠 영상을 브라우저에서 바로 만들고 내려받는 웹앱">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">🎬</span>
+    <div class="brand-text">
+      <strong>쇼츠 메이커</strong>
+      <small>9:16 세로 영상 스튜디오</small>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span id="saveState" class="save-state" title="작업은 이 브라우저에 자동 저장됩니다">자동 저장 켜짐</span>
+    <button class="btn ghost sm" id="btnImport" type="button">불러오기</button>
+    <button class="btn ghost sm" id="btnExportJson" type="button">프로젝트 저장</button>
+    <button class="btn ghost sm" id="btnReset" type="button">새로 시작</button>
+  </div>
+</header>
+
+<main class="studio">
+
+  <!-- ============ 미리보기 / 내보내기 ============ -->
+  <section class="preview-pane" aria-label="미리보기와 내보내기">
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="previewCanvas" width="720" height="1280" aria-label="9:16 실시간 미리보기"></canvas>
+        <div class="stage-empty" id="stageEmpty">
+          <span class="stage-empty-icon">🎞️</span>
+          <p>컷을 추가하면<br>여기에 미리보기가 나와요</p>
+        </div>
+        <div class="stage-top">
+          <span id="stageBadge" class="stage-badge">1 / 5 컷</span>
+          <span id="stageRes" class="stage-badge subtle">1080×1920</span>
+        </div>
+        <div class="export-overlay is-hidden" id="exportOverlay" role="status" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <strong id="exportPct">0%</strong>
+          <span id="exportLabel">영상 만드는 중…</span>
+          <div class="progress-track"><div id="exportBar" class="progress-bar"></div></div>
+          <button class="btn ghost sm" id="btnCancelExport" type="button">취소</button>
+          <p class="overlay-note">녹화 중에는 이 화면을 벗어나지 마세요</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button id="btnPlay" class="play-btn" type="button" aria-label="재생">▶</button>
+      <div class="time-read" aria-live="off"><span id="curTime">0:00</span><span class="time-sep">/</span><span id="totalTime">0:40</span></div>
+      <input id="seek" class="seek" type="range" min="0" max="40" step="0.05" value="0" aria-label="재생 위치">
+    </div>
+
+    <div class="quick-row">
+      <label class="field inline">해상도
+        <select id="resSelect">
+          <option value="720x1280">720×1280 · 빠름</option>
+          <option value="1080x1920">1080×1920 · 고화질</option>
+        </select>
+      </label>
+      <label class="toggle"><input type="checkbox" id="kenBurns" checked><span>Ken Burns 줌</span></label>
+    </div>
+
+    <button id="btnExport" class="btn primary export-btn" type="button"><span aria-hidden="true">🎥</span> 영상으로 내보내기</button>
+    <p class="export-note" id="exportNote">소리·자막 포함 · 실제 재생 시간만큼 걸려요</p>
+
+    <div class="result-card is-hidden" id="resultCard">
+      <div class="result-head">
+        <strong>✅ 영상 완성!</strong>
+        <span id="resultMeta"></span>
+      </div>
+      <video id="resultVideo" controls playsinline preload="metadata"></video>
+      <a id="btnDownload" class="btn primary" download>⬇️ 다시 다운로드</a>
+    </div>
+  </section>
+
+  <!-- ============ 편집 패널 ============ -->
+  <section class="editor-pane" aria-label="편집 도구">
+
+    <details class="panel" id="stylePanel" open>
+      <summary>
+        <span class="summary-title">🎨 전체 자막 스타일</span>
+        <small>모든 컷에 적용</small>
+      </summary>
+      <div class="panel-body">
+        <div class="control-grid">
+          <label class="field">글자 크기 <output id="fontSizeOut" for="fontSize">56</output>
+            <input type="range" id="fontSize" min="32" max="110" step="1" value="56">
+          </label>
+          <label class="field">굵기
+            <select id="fontWeight">
+              <option value="400">보통</option>
+              <option value="600">굵게</option>
+              <option value="700">더 굵게</option>
+              <option value="800">아주 굵게</option>
+              <option value="900">최대</option>
+            </select>
+          </label>
+          <div class="field">
+            <span class="field-label">위치</span>
+            <div class="segmented" id="posSeg" role="group" aria-label="자막 위치">
+              <button type="button" data-value="top">상단</button>
+              <button type="button" data-value="center">중앙</button>
+              <button type="button" data-value="bottom" class="on">하단</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">배경 박스</span>
+            <div class="segmented" id="bgSeg" role="group" aria-label="자막 배경">
+              <button type="button" data-value="dark" class="on">검정 반투명</button>
+              <button type="button" data-value="light">흰색</button>
+              <button type="button" data-value="none">없음</button>
+            </div>
+          </div>
+        </div>
+        <p class="tiny">컷 카드의 <b>‘이 컷만 스타일’</b>을 켜면 컷마다 따로 바꿀 수 있어요.</p>
+      </div>
+    </details>
+
+    <details class="panel" id="ttsPanel">
+      <summary>
+        <span class="summary-title">🗣️ 목소리 미리듣기 (TTS)</span>
+        <small>브라우저 음성</small>
+      </summary>
+      <div class="panel-body">
+        <div class="control-grid">
+          <label class="field wide">목소리
+            <select id="ttsVoice"><option value="">브라우저 기본 목소리</option></select>
+          </label>
+          <label class="field">속도 <output id="ttsRateOut" for="ttsRate">1.0x</output>
+            <input type="range" id="ttsRate" min="0.8" max="1.5" step="0.05" value="1">
+          </label>
+          <label class="field">피치 <output id="ttsPitchOut" for="ttsPitch">1.0</output>
+            <input type="range" id="ttsPitch" min="0.5" max="2" step="0.05" value="1">
+          </label>
+        </div>
+        <div class="row gap">
+          <button class="btn ghost sm" id="btnTtsStop" type="button">■ 정지</button>
+        </div>
+        <p class="tiny">💡 브라우저 목소리는 <b>미리듣기용</b>이에요. 영상 파일에 목소리를 담으려면 컷 카드에서 <b>마이크 녹음</b>이나 <b>음성 파일 업로드</b>를 사용하세요.</p>
+      </div>
+    </details>
+
+    <details class="panel" id="bgmPanel">
+      <summary>
+        <span class="summary-title">🎵 배경음악 (BGM)</span>
+        <small id="bgmName">없음</small>
+      </summary>
+      <div class="panel-body">
+        <input type="file" id="bgmFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
+        <div class="row gap">
+          <button class="btn ghost sm" id="btnBgmUpload" type="button">음악 파일 선택</button>
+          <button class="btn ghost sm danger is-hidden" id="btnBgmRemove" type="button">삭제</button>
+        </div>
+        <audio id="bgmPlayer" controls preload="metadata" class="is-hidden"></audio>
+        <div class="control-grid">
+          <label class="field">BGM 볼륨 <output id="bgmVolOut" for="bgmVol">18%</output>
+            <input type="range" id="bgmVol" min="0" max="100" step="1" value="18">
+          </label>
+          <label class="field">목소리 볼륨 <output id="voiceVolOut" for="voiceVol">100%</output>
+            <input type="range" id="voiceVol" min="0" max="100" step="1" value="100">
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <div class="panel cuts-panel">
+      <div class="project-row">
+        <label for="projectName">프로젝트 이름</label>
+        <input id="projectName" type="text" maxlength="60" placeholder="예: 쇼츠 1편 · 다이아 도둑" autocomplete="off">
+      </div>
+      <div class="cuts-head">
+        <div>
+          <h2>컷 리스트</h2>
+          <span id="cutSummary" class="cut-summary">0컷 · 0초</span>
+        </div>
+        <button class="btn primary sm" id="btnAddCut" type="button">＋ 컷 추가</button>
+      </div>
+      <div id="cutList" class="cut-list"></div>
+      <div class="empty-cuts is-hidden" id="emptyCuts">
+        <p>아직 컷이 없어요.</p>
+        <div class="row gap center">
+          <button class="btn sm" id="btnFirstCut" type="button">＋ 첫 컷 추가</button>
+          <button class="btn ghost sm" id="btnLoadSample" type="button">샘플 1편 불러오기</button>
+        </div>
+      </div>
+      <div class="cut-list-foot">
+        <button class="btn ghost sm" id="btnLoadSample2" type="button">↺ 샘플 1편 다시 불러오기</button>
+        <span class="tiny">이미지는 컷 카드의 썸네일을 눌러 교체할 수 있어요.</span>
+      </div>
+    </div>
+
+    <details class="panel" id="helpPanel">
+      <summary><span class="summary-title">❓ 사용법</span><small>30초 요약</small></summary>
+      <div class="panel-body help-body">
+        <ol>
+          <li><b>컷 카드</b>에서 이미지를 넣고, 자막·재생 시간을 맞춰요.</li>
+          <li>목소리는 <b>TTS로 미리 들어보고</b>, 영상에 담을 땐 <b>마이크 녹음</b>이나 <b>음성 파일 업로드</b>를 써요.</li>
+          <li><b>BGM</b>을 넣고 볼륨을 맞춰요.</li>
+          <li><b>영상으로 내보내기</b>를 누르면 실제 재생 시간만큼 녹화돼요. 녹화 중에는 화면을 벗어나거나 잠그지 마세요.</li>
+        </ol>
+        <p class="tiny">작업은 이 브라우저에 자동 저장돼요. 다른 기기로 옮기려면 <b>프로젝트 저장(JSON)</b>을 이용하세요.</p>
+      </div>
+    </details>
+
+    <p class="footnote">쇼츠 메이커 · 모든 편집은 내 브라우저 안에서만 처리돼요.</p>
+  </section>
+</main>
+
+<!-- 모바일에서 편집 중에도 보이는 미니 미리보기 -->
+<div id="miniPreview" class="mini-preview is-hidden">
+  <div class="mini-open" aria-hidden="true">
+    <canvas id="miniCanvas" width="144" height="256"></canvas>
+  </div>
+  <button id="miniClose" class="mini-close" type="button" aria-label="미니 미리보기 숨기기">✕</button>
+</div>
+
+<input type="file" id="importJsonInput" accept="application/json,.json" hidden>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
