@@ -48,6 +48,13 @@
 - 모든 처리는 로컬에서 이루어지며 어떤 파일도 외부로 전송하지 않습니다.
 - 프로젝트 JSON에는 이미지·음성이 base64로 함께 담겨 다른 기기로 옮길 수 있습니다.
 
+## 배포 (GitHub Pages)
+
+1. GitHub 저장소 **Settings → Pages**로 이동
+2. **Build and deployment → Source**를 `Deploy from a branch`로 선택
+3. Branch `main`, 폴더 `/ (root)` 선택 후 **Save**
+4. 1~2분 뒤 https://gobongi9988.github.io/shorts-maker/ 에서 열립니다.
+
 ## 로컬에서 실행
 
 ```bash
