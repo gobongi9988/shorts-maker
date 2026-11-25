@@ -445,6 +445,7 @@ body.is-exporting .top-actions{opacity:.55;pointer-events:none}
   .result-card video{max-height:260px}
 }
 @media (max-width:380px){
+  .brand-text{display:none}
   .top-actions .btn.sm{padding:0 7px;font-size:11px}
   .stage{max-width:74vw}
   .cut-body{grid-template-columns:66px minmax(0,1fr)}
