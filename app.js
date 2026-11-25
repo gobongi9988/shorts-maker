@@ -1823,6 +1823,7 @@ async function importProjectFile(file) {
 
   stopPlayback();
   stopTts();
+  clearResultCard();
   clearMediaCache();
 
   const newProject = normalizeProject(data);
@@ -1892,6 +1893,23 @@ let exportMime = '';
 let exportFileBase = '';
 let exportRaf = 0;
 let exportTotalSeconds = 0;
+let lastResultUrl = null;
+
+function clearResultCard() {
+  const v = $('#resultVideo');
+  if (v) {
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute('src');
+    try { v.load(); } catch (e) {}
+  }
+  if (lastResultUrl) {
+    try { URL.revokeObjectURL(lastResultUrl); } catch (e) {}
+    lastResultUrl = null;
+  }
+  $('#resultCard').classList.add('is-hidden');
+  $('#resultMeta').textContent = '';
+  $('#btnDownload').removeAttribute('href');
+}
 
 function detectVideoMime() {
   if (!('MediaRecorder' in window) || !window.MediaRecorder.isTypeSupported) return '';
@@ -1967,6 +1985,7 @@ async function exportVideo() {
   exporting = true;
   exportCancel = false;
   exportChunks = [];
+  clearResultCard();
   $('#btnExport').disabled = true;
   document.body.classList.add('is-exporting');
   const editor = $('.editor-pane');
@@ -2077,6 +2096,7 @@ function finishExport(ext) {
   }
 
   const url = URL.createObjectURL(blob);
+  lastResultUrl = url;
   const video = $('#resultVideo');
   video.src = url;
   $('#resultMeta').textContent = `${ext.toUpperCase()} · ${(blob.size / 1048576).toFixed(1)}MB · ${formatTime(exportTotalSeconds || totalDuration())}`;
@@ -2139,6 +2159,7 @@ function resetProject() {
   if (!confirm('현재 작업을 지우고 새로 시작할까요? 자동 저장된 내용도 사라져요.')) return;
   stopPlayback();
   stopTts();
+  clearResultCard();
   clearMediaCache();
   project = blankProject();
   currentTime = 0;
@@ -2153,6 +2174,7 @@ function loadSampleProject() {
   if (hasContent && !confirm('샘플 1편으로 바꿀까요? 지금 작업은 사라져요.')) return;
   stopPlayback();
   stopTts();
+  clearResultCard();
   clearMediaCache();
   project = sampleProject();
   currentTime = 0;
