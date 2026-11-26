@@ -7,8 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>쇼츠 메이커 · 9:16 세로 영상 스튜디오</title>
-<meta name="description" content="이미지·자막·목소리·BGM을 합쳐 9:16 쇼츠 영상을 브라우저에서 바로 만들고 내려받는 웹앱">
+<meta name="description" content="이미지·자막·목소리·효과음을 세세하게 꾸며 9:16 쇼츠 영상을 브라우저에서 바로 만들고 내려받는 웹앱">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Jua&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;700;900&family=Noto+Serif+KR:wght@400;700;900&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -68,7 +71,17 @@
           <option value="1080x1920">1080×1920 · 고화질</option>
         </select>
       </label>
-      <label class="toggle"><input type="checkbox" id="kenBurns" checked><span>Ken Burns 줌</span></label>
+      <label class="field inline">모션
+        <select id="motionQuick" aria-label="전체 화면 모션">
+          <option value="auto">자동 Ken Burns</option>
+          <option value="none">고정</option>
+          <option value="zoomIn">줌인</option>
+          <option value="zoomOut">줌아웃</option>
+          <option value="panLR">좌→우</option>
+          <option value="panRL">우→좌</option>
+          <option value="shake">흔들림</option>
+        </select>
+      </label>
     </div>
 
     <button id="btnExport" class="btn primary export-btn" type="button"><span aria-hidden="true">🎥</span> 영상으로 내보내기</button>
@@ -87,163 +100,358 @@
   <!-- ============ 편집 패널 ============ -->
   <section class="editor-pane" aria-label="편집 도구">
 
-    <details class="panel" id="stylePanel" open>
-      <summary>
-        <span class="summary-title">🎨 전체 자막 스타일</span>
-        <small>모든 컷에 적용</small>
-      </summary>
-      <div class="panel-body">
-        <div class="control-grid">
-          <label class="field">글자 크기 <output id="fontSizeOut" for="fontSize">56</output>
-            <input type="range" id="fontSize" min="32" max="110" step="1" value="56">
-          </label>
-          <label class="field">굵기
-            <select id="fontWeight">
-              <option value="400">보통</option>
-              <option value="600">굵게</option>
-              <option value="700">더 굵게</option>
-              <option value="800">아주 굵게</option>
-              <option value="900">최대</option>
+    <div class="tool-tabs" role="tablist" aria-label="편집 도구 종류">
+      <button type="button" role="tab" id="tab-screen" aria-controls="panel-screen" aria-selected="true" data-tab="screen" class="on">🎬 화면·모션</button>
+      <button type="button" role="tab" id="tab-text" aria-controls="panel-text" aria-selected="false" data-tab="text">🔤 자막·폰트</button>
+      <button type="button" role="tab" id="tab-audio" aria-controls="panel-audio" aria-selected="false" data-tab="audio">🎙️ 음성·효과음</button>
+    </div>
+
+    <!-- ===== 탭: 화면·모션 ===== -->
+    <div class="tool-panel" id="panel-screen" role="tabpanel" aria-labelledby="tab-screen" data-panel="screen">
+      <details class="panel" open>
+        <summary>
+          <span class="summary-title">🎥 이미지 모션</span>
+          <small id="motionSummary">자동 Ken Burns</small>
+        </summary>
+        <div class="panel-body">
+          <div class="field wide">전체 기본 모션
+            <select id="motionSelect">
+              <option value="auto">자동 Ken Burns · 컷마다 줌인/줌아웃 번갈아</option>
+              <option value="none">없음 · 고정</option>
+              <option value="zoomIn">천천히 줌인</option>
+              <option value="zoomOut">천천히 줌아웃</option>
+              <option value="panLR">좌 → 우 패닝</option>
+              <option value="panRL">우 → 좌 패닝</option>
+              <option value="shake">톡톡 흔들림 · 강조</option>
             </select>
-          </label>
-          <div class="field">
-            <span class="field-label">위치</span>
-            <div class="segmented" id="posSeg" role="group" aria-label="자막 위치">
-              <button type="button" data-value="top">상단</button>
-              <button type="button" data-value="center">중앙</button>
-              <button type="button" data-value="bottom" class="on">하단</button>
+          </div>
+          <p class="tiny">미리보기와 내보내기 영상에 똑같이 들어가요. 컷 카드의 <b>🎛 이 컷만 따로 설정</b>에서 컷마다 다른 모션을 줄 수 있어요.</p>
+        </div>
+      </details>
+
+      <details class="panel" open>
+        <summary>
+          <span class="summary-title">✂️ 컷 전환 효과</span>
+          <small id="transitionSummary">부드러운 페이드</small>
+        </summary>
+        <div class="panel-body">
+          <div class="field wide">전체 기본 전환
+            <select id="transitionSelect">
+              <option value="fade">부드러운 페이드</option>
+              <option value="cut">바로 전환 · 컷</option>
+              <option value="slide">슬라이드 전환</option>
+            </select>
+          </div>
+          <p class="tiny">컷이 바뀌는 순간 <b>약 0.45초</b> 동안 이어져요.</p>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>
+          <span class="summary-title">🔊 효과음 (SFX)</span>
+          <small id="sfxSummary">없음</small>
+        </summary>
+        <div class="panel-body">
+          <div class="control-grid">
+            <label class="field wide">전체 기본 효과음
+              <select id="sfxSelect">
+                <option value="none">없음</option>
+                <option value="ding">띵! · 알림</option>
+                <option value="boing">띠용 · 코믹</option>
+                <option value="boom">두둥! · 충격</option>
+                <option value="click">찰칵</option>
+                <option value="whoosh">휙 · 전환</option>
+                <option value="tada">짜잔</option>
+              </select>
+            </label>
+            <label class="field">효과음 볼륨 <output id="sfxVolOut" for="sfxVol">60%</output>
+              <input type="range" id="sfxVol" min="0" max="100" step="1" value="60">
+            </label>
+            <div class="field">
+              <span class="field-label">미리 듣기</span>
+              <button class="btn ghost sm" id="btnSfxPreview" type="button">▶ 효과음 재생</button>
             </div>
           </div>
-          <div class="field">
-            <span class="field-label">배경 박스</span>
-            <div class="segmented" id="bgSeg" role="group" aria-label="자막 배경">
-              <button type="button" data-value="dark" class="on">검정 반투명</button>
-              <button type="button" data-value="light">흰색</button>
-              <button type="button" data-value="none">없음</button>
-            </div>
+          <p class="tiny">효과음은 컷이 시작되는 순간 <b>영상 오디오에 직접 믹싱</b>돼요. 컷 카드에서 컷마다 다른 효과음과 볼륨을 고를 수 있어요.</p>
+        </div>
+      </details>
+    </div>
+
+    <!-- ===== 탭: 자막·폰트 ===== -->
+    <div class="tool-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" data-panel="text" hidden>
+      <details class="panel" open>
+        <summary>
+          <span class="summary-title">🔤 글꼴 · 크기</span>
+          <small id="fontSummary">기본 고딕 · 56</small>
+        </summary>
+        <div class="panel-body">
+          <div class="font-chips" id="fontChips" role="group" aria-label="자막 글꼴">
+            <button type="button" data-font="system">가나다 Aa<span>기본 고딕</span></button>
+            <button type="button" data-font="notoSans" style="font-family:'Noto Sans KR',sans-serif">가나다 Aa<span>노토 산스</span></button>
+            <button type="button" data-font="blackHan" style="font-family:'Black Han Sans',sans-serif">가나다 Aa<span>검은고딕</span></button>
+            <button type="button" data-font="doHyeon" style="font-family:'Do Hyeon',sans-serif">가나다 Aa<span>도현</span></button>
+            <button type="button" data-font="jua" style="font-family:'Jua',sans-serif">가나다 Aa<span>주아</span></button>
+            <button type="button" data-font="nanumPen" style="font-family:'Nanum Pen Script',cursive">가나다 Aa<span>나눔손글씨</span></button>
+            <button type="button" data-font="notoSerif" style="font-family:'Noto Serif KR',serif">가나다 Aa<span>노토 명조</span></button>
           </div>
-          <label class="field wide">자막 효과
-            <select id="effectSelect">
-              <option value="none">고정 · 효과 없음</option>
-              <option value="pop">팝업 통통 · 통통 튀어오르며 등장</option>
-              <option value="typing">타자기 · 한 글자씩 타다닥</option>
-              <option value="highlight">단어 강조 · 순서대로 형광 하이라이트</option>
-              <option value="slideUp">슬라이드 업 · 아래에서 올라오며 페이드인</option>
-              <option value="punch">펀치 강조 · 착 달라붙는 강조</option>
-            </select>
-          </label>
+          <div class="control-grid">
+            <label class="field">글자 크기 <output id="fontSizeOut" for="fontSize">56</output>
+              <input type="range" id="fontSize" min="28" max="120" step="1" value="56">
+            </label>
+            <label class="field">숫자로 입력
+              <input type="number" id="fontSizeNum" min="28" max="120" step="1" value="56" inputmode="numeric">
+            </label>
+            <label class="field">굵기
+              <select id="fontWeight">
+                <option value="400">보통</option>
+                <option value="600">굵게</option>
+                <option value="700">더 굵게</option>
+                <option value="800">아주 굵게</option>
+                <option value="900">최대</option>
+              </select>
+            </label>
+            <label class="field">글자 등장 모션
+              <select id="effectSelect">
+                <option value="none">고정 · 효과 없음</option>
+                <option value="pop">팝업 통통 · 통통 튀어오르며 등장</option>
+                <option value="typing">타자기 · 한 글자씩 타다닥</option>
+                <option value="highlight">단어별 하이라이트 · 순서대로 형광</option>
+                <option value="slideUp">아래에서 슬라이드 · 올라오며 페이드인</option>
+                <option value="punch">펀치 강조 · 착 달라붙는 강조</option>
+                <option value="zoomIn">줌인 등장 · 작게서 확 커지며</option>
+                <option value="shake">흔들림 강조 · 톡톡 떨리며</option>
+                <option value="letterPop">한 글자씩 톡톡 · 글자마다 통통</option>
+              </select>
+            </label>
+          </div>
+          <p class="tiny">글꼴은 <b>무료 웹폰트</b>(Google Fonts) 6종이에요. 처음 한 번만 내려받고, 미리보기와 영상 모두 같은 글꼴로 그려져요.</p>
         </div>
-        <p class="tiny">자막 효과는 <b>미리보기 재생</b>과 <b>내보내기 영상</b>에 똑같이 적용돼요. 컷 카드의 <b>‘이 컷만 스타일’</b>에서 컷마다 따로 고를 수도 있어요.</p>
-      </div>
-    </details>
+      </details>
 
-    <details class="panel" id="ttsPanel">
-      <summary>
-        <span class="summary-title">🗣️ 목소리 미리듣기 (TTS)</span>
-        <small>브라우저 음성</small>
-      </summary>
-      <div class="panel-body">
-        <div class="control-grid">
-          <label class="field wide">목소리
-            <select id="ttsVoice"><option value="">브라우저 기본 목소리</option></select>
-          </label>
-          <label class="field">속도 <output id="ttsRateOut" for="ttsRate">1.0x</output>
-            <input type="range" id="ttsRate" min="0.8" max="1.5" step="0.05" value="1">
-          </label>
-          <label class="field">피치 <output id="ttsPitchOut" for="ttsPitch">1.0</output>
-            <input type="range" id="ttsPitch" min="0.5" max="2" step="0.05" value="1">
-          </label>
+      <details class="panel" open>
+        <summary>
+          <span class="summary-title">📍 위치 · 정렬</span>
+          <small id="posSummary">하단 · 가운데</small>
+        </summary>
+        <div class="panel-body">
+          <div class="control-grid">
+            <div class="field">
+              <span class="field-label">세로 위치</span>
+              <div class="segmented" id="posSeg" role="group" aria-label="자막 위치">
+                <button type="button" data-value="top">상단</button>
+                <button type="button" data-value="center">중앙</button>
+                <button type="button" data-value="bottom" class="on">하단</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">가로 정렬</span>
+              <div class="segmented" id="alignSeg" role="group" aria-label="자막 가로 정렬">
+                <button type="button" data-value="left">왼쪽</button>
+                <button type="button" data-value="center" class="on">가운데</button>
+                <button type="button" data-value="right">오른쪽</button>
+              </div>
+            </div>
+            <label class="field wide">세로 미세 조정 <output id="offsetYOut" for="offsetY">0</output>
+              <input type="range" id="offsetY" min="-30" max="30" step="1" value="0">
+            </label>
+          </div>
+          <p class="tiny">세로 미세 조정은 화면 높이의 %만큼 위(+)/아래(−)로 옮겨요.</p>
         </div>
-        <div class="row gap">
-          <button class="btn ghost sm" id="btnTtsStop" type="button">■ 정지</button>
-        </div>
-        <p class="tts-note">기기(아이폰·PC)에 설치된 한국어 음성이 표시됩니다. 영상 파일에 소리를 구우려면 아래 컷별 <b>녹음</b>·<b>음성 파일</b> 또는 <b>🎙️ AI 성우</b>를 사용해 주세요.</p>
-      </div>
-    </details>
+      </details>
 
-    <details class="panel" id="aiVoicePanel">
-      <summary>
-        <span class="summary-title">🎙️ AI 성우 목소리 생성 (OpenAI)</span>
-        <small id="aiVoiceSummary">nova · 1.05x</small>
-      </summary>
-      <div class="panel-body">
-        <div class="field wide">
-          <span class="field-label">OpenAI API 키</span>
-          <span class="key-input">
-            <input type="password" id="openaiKey" aria-label="OpenAI API 키" placeholder="sk-..." autocomplete="off" spellcheck="false">
-            <button class="icon-btn key-eye" id="btnToggleKey" type="button" aria-label="키 보기" title="키 보기">👁</button>
-          </span>
+      <details class="panel">
+        <summary>
+          <span class="summary-title">🎨 글자 꾸미기</span>
+          <small id="decoSummary">흰색 · 외곽선 0 · 그림자 35</small>
+        </summary>
+        <div class="panel-body">
+          <div class="control-grid">
+            <div class="field">
+              <span class="field-label">글자색</span>
+              <div class="color-row">
+                <input type="color" id="textColor" value="#ffffff" aria-label="글자색">
+                <div class="swatches" id="textSwatches">
+                  <button type="button" data-color="#ffffff" style="--c:#ffffff" aria-label="흰색"></button>
+                  <button type="button" data-color="#ffe14d" style="--c:#ffe14d" aria-label="노랑"></button>
+                  <button type="button" data-color="#ffd0e0" style="--c:#ffd0e0" aria-label="분홍"></button>
+                  <button type="button" data-color="#9ff5c8" style="--c:#9ff5c8" aria-label="민트"></button>
+                  <button type="button" data-color="#8fd7ff" style="--c:#8fd7ff" aria-label="하늘"></button>
+                  <button type="button" data-color="#111318" style="--c:#111318" aria-label="검정"></button>
+                </div>
+              </div>
+            </div>
+            <label class="field">자막 배경 박스
+              <select id="bgSelect">
+                <option value="dark">검정 반투명</option>
+                <option value="light">흰색 박스</option>
+                <option value="none">없음</option>
+                <option value="color">컬러 박스</option>
+                <option value="pill">둥근 알약형</option>
+              </select>
+            </label>
+            <div class="field">
+              <span class="field-label">배경 박스 색</span>
+              <div class="color-row">
+                <input type="color" id="bgColor" value="#ffd54a" aria-label="배경 박스 색">
+                <span class="tiny inline">컬러·알약형에 적용</span>
+              </div>
+            </div>
+            <label class="field">외곽선 두께 <output id="outlineOut" for="outline">0</output>
+              <input type="range" id="outline" min="0" max="14" step="1" value="0">
+            </label>
+            <div class="field">
+              <span class="field-label">외곽선 색</span>
+              <div class="color-row">
+                <input type="color" id="outlineColor" value="#000000" aria-label="외곽선 색">
+                <div class="swatches" id="outlineSwatches">
+                  <button type="button" data-color="#000000" style="--c:#000000" aria-label="검정"></button>
+                  <button type="button" data-color="#ffffff" style="--c:#ffffff" aria-label="흰색"></button>
+                  <button type="button" data-color="#1b2a4a" style="--c:#1b2a4a" aria-label="남색"></button>
+                  <button type="button" data-color="#4a1b1b" style="--c:#4a1b1b" aria-label="진빨강"></button>
+                </div>
+              </div>
+            </div>
+            <label class="field wide">그림자 강도 <output id="shadowOut" for="shadow">35</output>
+              <input type="range" id="shadow" min="0" max="100" step="1" value="35">
+            </label>
+          </div>
+          <p class="tiny">글자색·외곽선·그림자·박스는 미리보기와 내보내기 영상에 똑같이 적용돼요.</p>
         </div>
-        <div class="row gap key-row">
-          <button class="btn ghost sm" id="btnSaveKey" type="button">키 저장</button>
-          <button class="btn ghost sm danger" id="btnClearKey" type="button">키 삭제</button>
-          <span class="key-state" id="keyState">저장된 키 없음</span>
-        </div>
-        <p class="tiny">입력한 키는 <b>내 브라우저(localStorage)에만</b> 저장되고, 음성을 만들 때 OpenAI(api.openai.com)로만 전송돼요. 공용 PC에서는 저장하지 마세요.</p>
+      </details>
+    </div>
 
-        <div class="control-grid ai-controls">
-          <label class="field wide">AI 성우
-            <select id="aiVoice">
-              <option value="nova">nova · 여성 · 밝고 또렷한 (기본)</option>
-              <option value="coral">coral · 여성 · 생기있는</option>
-              <option value="sage">sage · 여성 · 차분한</option>
-              <option value="shimmer">shimmer · 여성 · 따뜻한</option>
-              <option value="alloy">alloy · 중성 · 차분한</option>
-              <option value="ash">ash · 남성 · 깔끔한</option>
-              <option value="echo">echo · 남성 · 중저음</option>
-              <option value="onyx">onyx · 남성 · 묵직한</option>
-              <option value="fable">fable · 내레이션 · 이야기톤</option>
-              <option value="ballad" data-mini-only="1">ballad · 남성 · 부드러운 (gpt-4o-mini-tts 전용)</option>
-            </select>
-          </label>
-          <label class="field">말하기 속도 <output id="aiSpeedOut" for="aiSpeed">1.05x</output>
-            <input type="range" id="aiSpeed" min="0.75" max="1.4" step="0.05" value="1.05">
-          </label>
-          <label class="field">모델
-            <select id="aiModel">
-              <option value="tts-1">tts-1 · 빠름·저렴</option>
-              <option value="tts-1-hd">tts-1-hd · 고음질</option>
-              <option value="gpt-4o-mini-tts">gpt-4o-mini-tts · 최신·톤 지시문</option>
-            </select>
-          </label>
-          <label class="toggle small wide"><input type="checkbox" id="aiAutoFit" checked><span>생성한 음성 길이에 컷 재생 시간 맞추기</span></label>
+    <!-- ===== 탭: 음성·효과음 ===== -->
+    <div class="tool-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" data-panel="audio" hidden>
+      <details class="panel" open>
+        <summary>
+          <span class="summary-title">🎚 목소리 배속 · 볼륨</span>
+          <small id="voiceSummary">1.0x · 100%</small>
+        </summary>
+        <div class="panel-body">
+          <div class="control-grid">
+            <label class="field">전체 배속 <output id="voiceRateOut" for="voiceRate">1.00x</output>
+              <input type="range" id="voiceRate" min="0.8" max="1.5" step="0.05" value="1">
+            </label>
+            <label class="field">전체 볼륨 <output id="voiceVolOut" for="voiceVol">100%</output>
+              <input type="range" id="voiceVol" min="0" max="100" step="1" value="100">
+            </label>
+          </div>
+          <p class="tiny">녹음·업로드·AI 성우 음성 모두에 적용돼요. 배속을 바꾸면 <b>‘음성 길이에 맞추기’</b>가 켜진 컷의 재생 시간도 다시 맞춰져요. 컷마다 다르게 하려면 컷 카드의 <b>🎛 이 컷만 따로 설정</b>에서 조절해요.</p>
         </div>
+      </details>
 
-        <div class="row gap ai-actions">
-          <button class="btn primary sm" id="btnAiAll" type="button">🎙️ 전체 컷 AI 음성 한 번에 만들기</button>
+      <details class="panel">
+        <summary>
+          <span class="summary-title">🗣️ 목소리 미리듣기 (TTS)</span>
+          <small>브라우저 음성</small>
+        </summary>
+        <div class="panel-body">
+          <div class="control-grid">
+            <label class="field wide">목소리
+              <select id="ttsVoice"><option value="">브라우저 기본 목소리</option></select>
+            </label>
+            <label class="field">속도 <output id="ttsRateOut" for="ttsRate">1.0x</output>
+              <input type="range" id="ttsRate" min="0.8" max="1.5" step="0.05" value="1">
+            </label>
+            <label class="field">피치 <output id="ttsPitchOut" for="ttsPitch">1.0</output>
+              <input type="range" id="ttsPitch" min="0.5" max="2" step="0.05" value="1">
+            </label>
+          </div>
+          <div class="row gap">
+            <button class="btn ghost sm" id="btnTtsStop" type="button">■ 정지</button>
+          </div>
+          <p class="tts-note">기기(아이폰·PC)에 설치된 한국어 음성이 표시됩니다. 영상 파일에 소리를 구우려면 컷별 <b>녹음</b>·<b>음성 파일</b> 또는 <b>🎙️ AI 성우</b>를 사용해 주세요.</p>
         </div>
-        <div class="ai-progress is-hidden" id="aiProgress" role="status" aria-live="polite">
-          <div class="progress-track"><div id="aiBar" class="progress-bar"></div></div>
-          <span class="tiny" id="aiProgressText"></span>
-        </div>
-        <p class="tiny" id="aiHint">컷 카드의 <b>🎙️ AI 음성</b> 버튼으로 한 컷만 만들 수도 있어요. 만든 음성은 다른 음성처럼 IndexedDB에 저장돼 새로고침해도 남고, <b>▶ 재생</b>과 <b>영상 내보내기</b>에 그대로 들어가요.</p>
-        <p class="tiny ai-deprecation">참고: OpenAI가 <b>tts-1 · tts-1-hd · gpt-4o-mini-tts</b> 모델을 2027-01-06에 종료할 예정이에요. 그 전까지는 지금처럼 동작해요.</p>
-      </div>
-    </details>
+      </details>
 
-    <details class="panel" id="bgmPanel">
-      <summary>
-        <span class="summary-title">🎵 배경음악 (BGM)</span>
-        <small id="bgmName">없음</small>
-      </summary>
-      <div class="panel-body">
-        <input type="file" id="bgmFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
-        <div class="row gap">
-          <button class="btn ghost sm" id="btnBgmUpload" type="button">음악 파일 선택</button>
-          <button class="btn ghost sm danger is-hidden" id="btnBgmRemove" type="button">삭제</button>
-        </div>
-        <audio id="bgmPlayer" controls preload="metadata" class="is-hidden"></audio>
-        <div class="control-grid">
-          <label class="field">BGM 볼륨 <output id="bgmVolOut" for="bgmVol">18%</output>
-            <input type="range" id="bgmVol" min="0" max="100" step="1" value="18">
-          </label>
-          <label class="field">목소리 볼륨 <output id="voiceVolOut" for="voiceVol">100%</output>
-            <input type="range" id="voiceVol" min="0" max="100" step="1" value="100">
-          </label>
-        </div>
-      </div>
-    </details>
+      <details class="panel" id="aiVoicePanel">
+        <summary>
+          <span class="summary-title">🎙️ AI 성우 목소리 생성 (OpenAI)</span>
+          <small id="aiVoiceSummary">nova · 1.05x</small>
+        </summary>
+        <div class="panel-body">
+          <div class="field wide">
+            <span class="field-label">OpenAI API 키</span>
+            <span class="key-input">
+              <input type="password" id="openaiKey" aria-label="OpenAI API 키" placeholder="sk-..." autocomplete="off" spellcheck="false">
+              <button class="icon-btn key-eye" id="btnToggleKey" type="button" aria-label="키 보기" title="키 보기">👁</button>
+            </span>
+          </div>
+          <div class="row gap key-row">
+            <button class="btn ghost sm" id="btnSaveKey" type="button">키 저장</button>
+            <button class="btn ghost sm danger" id="btnClearKey" type="button">키 삭제</button>
+            <span class="key-state" id="keyState">저장된 키 없음</span>
+          </div>
+          <p class="tiny">입력한 키는 <b>내 브라우저(localStorage)에만</b> 저장되고, 음성을 만들 때 OpenAI(api.openai.com)로만 전송돼요. 공용 PC에서는 저장하지 마세요.</p>
 
+          <div class="control-grid ai-controls">
+            <label class="field wide">AI 성우
+              <select id="aiVoice">
+                <option value="nova">nova · 여성 · 밝고 또렷한 (기본)</option>
+                <option value="coral">coral · 여성 · 생기있는</option>
+                <option value="sage">sage · 여성 · 차분한</option>
+                <option value="shimmer">shimmer · 여성 · 따뜻한</option>
+                <option value="alloy">alloy · 중성 · 차분한</option>
+                <option value="ash">ash · 남성 · 깔끔한</option>
+                <option value="echo">echo · 남성 · 중저음</option>
+                <option value="onyx">onyx · 남성 · 묵직한</option>
+                <option value="fable">fable · 내레이션 · 이야기톤</option>
+                <option value="ballad" data-mini-only="1">ballad · 남성 · 부드러운 (gpt-4o-mini-tts 전용)</option>
+              </select>
+            </label>
+            <label class="field">말하기 속도 <output id="aiSpeedOut" for="aiSpeed">1.05x</output>
+              <input type="range" id="aiSpeed" min="0.75" max="1.4" step="0.05" value="1.05">
+            </label>
+            <label class="field">모델
+              <select id="aiModel">
+                <option value="tts-1">tts-1 · 빠름·저렴</option>
+                <option value="tts-1-hd">tts-1-hd · 고음질</option>
+                <option value="gpt-4o-mini-tts">gpt-4o-mini-tts · 최신·톤 지시문</option>
+              </select>
+            </label>
+            <label class="toggle small wide"><input type="checkbox" id="aiAutoFit" checked><span>생성한 음성 길이에 컷 재생 시간 맞추기</span></label>
+          </div>
+
+          <div class="row gap ai-actions">
+            <button class="btn primary sm" id="btnAiAll" type="button">🎙️ 전체 컷 AI 음성 한 번에 만들기</button>
+          </div>
+          <div class="ai-progress is-hidden" id="aiProgress" role="status" aria-live="polite">
+            <div class="progress-track"><div id="aiBar" class="progress-bar"></div></div>
+            <span class="tiny" id="aiProgressText"></span>
+          </div>
+          <p class="tiny" id="aiHint">컷 카드의 <b>🎙️ AI 음성</b> 버튼으로 한 컷만 만들 수도 있어요. 만든 음성은 다른 음성처럼 IndexedDB에 저장돼 새로고침해도 남고, <b>▶ 재생</b>과 <b>영상 내보내기</b>에 그대로 들어가요.</p>
+          <p class="tiny ai-deprecation">참고: OpenAI가 <b>tts-1 · tts-1-hd · gpt-4o-mini-tts</b> 모델을 2027-01-06에 종료할 예정이에요. 그 전까지는 지금처럼 동작해요.</p>
+        </div>
+      </details>
+
+      <details class="panel" id="bgmPanel">
+        <summary>
+          <span class="summary-title">🎵 배경음악 (BGM)</span>
+          <small id="bgmName">없음</small>
+        </summary>
+        <div class="panel-body">
+          <input type="file" id="bgmFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
+          <div class="row gap">
+            <button class="btn ghost sm" id="btnBgmUpload" type="button">음악 파일 선택</button>
+            <button class="btn ghost sm danger is-hidden" id="btnBgmRemove" type="button">삭제</button>
+          </div>
+          <audio id="bgmPlayer" controls preload="metadata" class="is-hidden"></audio>
+          <div class="control-grid">
+            <label class="field">BGM 볼륨 <output id="bgmVolOut" for="bgmVol">18%</output>
+              <input type="range" id="bgmVol" min="0" max="100" step="1" value="18">
+            </label>
+            <label class="field">페이드 인 <output id="bgmFadeInOut" for="bgmFadeIn">0.0초</output>
+              <input type="range" id="bgmFadeIn" min="0" max="3" step="0.5" value="0">
+            </label>
+            <label class="field">페이드 아웃 <output id="bgmFadeOutOut" for="bgmFadeOut">0.0초</output>
+              <input type="range" id="bgmFadeOut" min="0" max="3" step="0.5" value="0">
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ===== 컷 리스트 ===== -->
     <div class="panel cuts-panel">
       <div class="project-row">
         <label for="projectName">프로젝트 이름</label>
@@ -280,8 +488,9 @@
       <div class="panel-body help-body">
         <ol>
           <li><b>컷 카드</b>에서 이미지를 넣고, 자막·재생 시간을 맞춰요.</li>
-          <li>목소리는 <b>TTS로 미리 들어보고</b>, 영상에 담을 땐 <b>마이크 녹음</b>·<b>음성 파일 업로드</b>·<b>🎙️ AI 성우(OpenAI)</b>를 써요.</li>
-          <li><b>BGM</b>을 넣고 볼륨을 맞춰요.</li>
+          <li><b>🎬 화면·모션</b> 탭에서 컷마다 움직임·전환·효과음을 정해요.</li>
+          <li><b>🔤 자막·폰트</b> 탭에서 글꼴·크기·색·외곽선·등장 모션을 꾸며요.</li>
+          <li><b>🎙️ 음성·효과음</b> 탭에서 목소리 배속·볼륨, AI 성우, BGM을 맞춰요.</li>
           <li><b>영상으로 내보내기</b>를 누르면 실제 재생 시간만큼 녹화돼요. 녹화 중에는 화면을 벗어나거나 잠그지 마세요.</li>
         </ol>
         <p class="tiny">작업은 이 브라우저에 자동 저장돼요. 다른 기기로 옮기려면 <b>프로젝트 저장(JSON)</b>을 이용하세요.</p>

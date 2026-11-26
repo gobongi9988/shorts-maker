@@ -51,20 +51,69 @@ const MINI_H = 256;
 const FONT_STACK = "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif";
 const LS_KEY = 'shorts-maker:project:v1';
 const DB_NAME = 'shorts-maker-media';
-const DEFAULT_STYLE = { fontSize: 56, position: 'bottom', bg: 'dark', weight: 800, effect: 'none' };
-const DEFAULT_OPTIONS = { kenBurns: true, resolution: '1080x1920', bgmVolume: 0.18, voiceVolume: 1 };
+const DEFAULT_STYLE = {
+  fontSize: 56, position: 'bottom', bg: 'dark', weight: 800, effect: 'none',
+  font: 'system', align: 'center', offsetY: 0,
+  color: '#ffffff', outline: 0, outlineColor: '#000000', shadow: 35, bgColor: '#ffd54a'
+};
+const DEFAULT_OPTIONS = {
+  kenBurns: true, motion: 'auto', transition: 'fade',
+  resolution: '1080x1920', bgmVolume: 0.18, voiceVolume: 1, voiceRate: 1,
+  sfxId: 'none', sfxVolume: 0.6, bgmFadeIn: 0, bgmFadeOut: 0
+};
 const STYLE_WEIGHTS = [400, 600, 700, 800, 900];
 const WEIGHT_LABEL = { 400: '보통', 600: '굵게', 700: '더 굵게', 800: '아주 굵게', 900: '최대' };
 
-/* 자막 등장 애니메이션 6종 */
-const SUBTITLE_EFFECTS = ['none', 'pop', 'typing', 'highlight', 'slideUp', 'punch'];
+/* 내장 한글 웹폰트 (Google Fonts) — canvas에도 같은 글꼴로 그린다 */
+const FONT_DEFS = {
+  system:   { label: '기본 고딕', family: '', stack: FONT_STACK, weight: '800' },
+  notoSans: { label: '노토 산스', family: 'Noto Sans KR', stack: `'Noto Sans KR', ${FONT_STACK}`, weight: '800' },
+  blackHan: { label: '검은고딕', family: 'Black Han Sans', stack: `'Black Han Sans', ${FONT_STACK}`, weight: '400' },
+  doHyeon:  { label: '도현', family: 'Do Hyeon', stack: `'Do Hyeon', ${FONT_STACK}`, weight: '400' },
+  jua:      { label: '주아', family: 'Jua', stack: `'Jua', ${FONT_STACK}`, weight: '400' },
+  nanumPen: { label: '나눔손글씨', family: 'Nanum Pen Script', stack: `'Nanum Pen Script', ${FONT_STACK}`, weight: '400' },
+  notoSerif:{ label: '노토 명조', family: 'Noto Serif KR', stack: `'Noto Serif KR', ${FONT_STACK}`, weight: '800' }
+};
+const FONT_KEYS = Object.keys(FONT_DEFS);
+const loadedFonts = new Set();
+
+/* 이미지 모션 */
+const MOTION_KEYS = ['auto', 'none', 'zoomIn', 'zoomOut', 'panLR', 'panRL', 'shake'];
+const MOTION_LABEL = {
+  auto: '자동 Ken Burns',
+  none: '고정',
+  zoomIn: '천천히 줌인',
+  zoomOut: '천천히 줌아웃',
+  panLR: '좌→우 패닝',
+  panRL: '우→좌 패닝',
+  shake: '톡톡 흔들림'
+};
+
+/* 컷 전환 */
+const TRANSITION_KEYS = ['cut', 'fade', 'slide'];
+const TRANSITION_LABEL = { cut: '바로 전환(컷)', fade: '부드러운 페이드', slide: '슬라이드 전환' };
+const TRANSITION_DUR = { cut: 0, fade: 0.45, slide: 0.4 };
+
+/* 내장 효과음 */
+const SFX_KEYS = ['none', 'ding', 'boing', 'boom', 'click', 'whoosh', 'tada'];
+const SFX_LABEL = {
+  none: '없음', ding: '띵! (알림)', boing: '띠용 (코믹)', boom: '두둥! (충격)',
+  click: '찰칵', whoosh: '휙 (전환)', tada: '짜잔'
+};
+const SFX_DUR = { ding: 0.9, boing: 0.65, boom: 1.1, click: 0.28, whoosh: 0.55, tada: 1.0 };
+
+/* 자막 등장 애니메이션 9종 */
+const SUBTITLE_EFFECTS = ['none', 'pop', 'typing', 'highlight', 'slideUp', 'punch', 'zoomIn', 'shake', 'letterPop'];
 const EFFECT_LABEL = {
   none: '고정',
   pop: '팝업 통통',
   typing: '타자기',
   highlight: '단어 강조',
   slideUp: '슬라이드 업',
-  punch: '펀치 강조'
+  punch: '펀치 강조',
+  zoomIn: '줌인 등장',
+  shake: '흔들림 강조',
+  letterPop: '한 글자씩 톡톡'
 };
 const EFFECT_DESC = {
   none: '효과 없이 그대로 표시',
@@ -72,8 +121,13 @@ const EFFECT_DESC = {
   typing: '한 글자씩 타다닥',
   highlight: '단어가 순서대로 형광 강조',
   slideUp: '아래에서 부드럽게 올라오며 페이드인',
-  punch: '착 달라붙는 강조 + 미세한 흔들림'
+  punch: '착 달라붙는 강조 + 미세한 흔들림',
+  zoomIn: '작고 흐리게 시작해 확 커지며 등장',
+  shake: '등장과 함께 톡톡 떨림',
+  letterPop: '글자마다 톡톡 튀어나오며 등장'
 };
+const BG_VALUES = ['dark', 'light', 'none', 'color', 'pill'];
+const ALIGN_VALUES = ['left', 'center', 'right'];
 
 /* 목소리 톤 변조 프리셋 (재생 속도 + 이퀄라이저) */
 const TONE_KEYS = ['normal', 'bright', 'deep', 'chipmunk', 'radio'];
@@ -144,13 +198,72 @@ const DEFAULT_AI = { voice: 'nova', speed: 1.05, model: 'tts-1', autoFit: true }
 
 function normalizeEffect(v) { return SUBTITLE_EFFECTS.includes(v) ? v : 'none'; }
 function normalizeTone(v) { return TONE_KEYS.includes(v) ? v : 'normal'; }
+function normalizeMotion(v) { return MOTION_KEYS.includes(v) ? v : 'auto'; }
+function normalizeTransition(v) { return TRANSITION_KEYS.includes(v) ? v : 'fade'; }
+function normalizeSfx(v) { return SFX_KEYS.includes(v) ? v : 'none'; }
+function normalizeFont(v) { return FONT_KEYS.includes(v) ? v : 'system'; }
+function normalizeBg(v) { return BG_VALUES.includes(v) ? v : 'dark'; }
+function normalizeAlign(v) { return ALIGN_VALUES.includes(v) ? v : 'center'; }
+function hexColor(v, fallback) {
+  return /^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v).toLowerCase() : fallback;
+}
+
+/* 컷마다 저장한 스타일을 전체 스타일 위에 덮어 쓴다 */
+function normalizeStyle(raw, base = DEFAULT_STYLE) {
+  const s = raw || {};
+  const b = { ...DEFAULT_STYLE, ...base };
+  return {
+    fontSize: clamp(parseInt(s.fontSize, 10) || b.fontSize, 24, 160),
+    position: ['top', 'center', 'bottom'].includes(s.position) ? s.position : b.position,
+    bg: normalizeBg(s.bg || b.bg),
+    weight: STYLE_WEIGHTS.includes(Number(s.weight)) ? Number(s.weight) : b.weight,
+    effect: s.effect === undefined ? normalizeEffect(b.effect) : normalizeEffect(s.effect),
+    font: normalizeFont(s.font || b.font),
+    align: normalizeAlign(s.align || b.align),
+    offsetY: clamp(Number.isFinite(parseFloat(s.offsetY)) ? parseFloat(s.offsetY) : b.offsetY, -30, 30),
+    color: hexColor(s.color, b.color),
+    outline: clamp(Number.isFinite(parseFloat(s.outline)) ? parseFloat(s.outline) : b.outline, 0, 14),
+    outlineColor: hexColor(s.outlineColor, b.outlineColor),
+    shadow: clamp(Number.isFinite(parseFloat(s.shadow)) ? parseFloat(s.shadow) : b.shadow, 0, 100),
+    bgColor: hexColor(s.bgColor, b.bgColor)
+  };
+}
+
+/* 컷별 목소리 배속·볼륨 (값이 없으면 전체 설정을 따른다) */
+function voiceRateFor(cut) {
+  const own = cut && parseFloat(cut.voiceRate);
+  const v = Number.isFinite(own) && own > 0 ? own : (parseFloat(project && project.options && project.options.voiceRate) || 1);
+  return clamp(v, 0.8, 1.5);
+}
+function voiceVolumeFor(cut) {
+  const own = cut && parseFloat(cut.voiceVolume);
+  if (Number.isFinite(own) && own >= 0) return clamp(own, 0, 1);
+  return clamp((project && project.options && project.options.voiceVolume != null) ? project.options.voiceVolume : 1, 0, 1);
+}
+function motionFor(cut, index) {
+  const own = cut && cut.motion;
+  const v = own ? normalizeMotion(own) : normalizeMotion(project.options.motion);
+  return v;
+}
+function transitionFor(cut) {
+  const own = cut && cut.transition;
+  return own ? normalizeTransition(own) : normalizeTransition(project.options.transition);
+}
+function sfxFor(cut) {
+  const own = cut && cut.sfx;
+  if (own && own.id) return { id: normalizeSfx(own.id), volume: clamp(own.volume != null ? own.volume : (project.options.sfxVolume ?? 0.6), 0, 1) };
+  return { id: normalizeSfx(project.options.sfxId), volume: clamp(project.options.sfxVolume ?? 0.6, 0, 1) };
+}
 function toneFor(cut) {
   return TONE_PRESETS[normalizeTone(cut && cut.tone)] || TONE_PRESETS.normal;
 }
-/* 톤 변조 후 실제 타임라인에서 차지하는 길이 */
+/* 톤 변조·배속 후 실제 타임라인에서 차지하는 길이 */
+function tonalPlaybackRate(cut) {
+  return toneFor(cut).rate * voiceRateFor(cut);
+}
 function tonalDuration(rawSeconds, cut) {
   const d = Math.max(0, Number(rawSeconds) || 0);
-  return d / toneFor(cut).rate;
+  return d / tonalPlaybackRate(cut);
 }
 const easeOutCubic = u => 1 - Math.pow(1 - u, 3);
 
@@ -226,12 +339,57 @@ function newCut(partial = {}) {
     audio: null,
     tone: 'normal',
     style: null,
+    motion: null,
+    transition: null,
+    sfx: null,
+    voiceRate: null,
+    voiceVolume: null,
     ...partial
   };
 }
 
 function isMobileView() {
   return window.matchMedia('(max-width: 980px)').matches;
+}
+
+/* ------------------------------------------------------------
+   웹폰트 로딩 — canvas에 정확히 그리려면 먼저 글꼴이 준비돼야 한다.
+   ------------------------------------------------------------ */
+function fontStackFor(key) {
+  return (FONT_DEFS[normalizeFont(key)] || FONT_DEFS.system).stack;
+}
+function fontSpec(key) {
+  const f = FONT_DEFS[normalizeFont(key)] || FONT_DEFS.system;
+  return f;
+}
+async function ensureFontLoaded(key) {
+  const f = fontSpec(key);
+  if (!f.family || !document.fonts) return true;
+  const id = f.family;
+  try {
+    // 굵기별로 실제 사용할 글꼴을 명시적으로 요청해야 canvas 첫 프레임에 바뀐 글꼴이 찍힌다.
+    await Promise.all([
+      document.fonts.load(`400 48px "${f.family}"`, '가나다 ABC 123'),
+      document.fonts.load(`800 48px "${f.family}"`, '가나다 ABC 123'),
+      document.fonts.load(`900 48px "${f.family}"`, '가나다 ABC 123')
+    ]);
+    loadedFonts.add(id);
+    return document.fonts.check(`400 48px "${f.family}"`);
+  } catch (e) {
+    return false;
+  }
+}
+async function ensureAllFontsLoaded() {
+  if (!document.fonts) return;
+  const keys = FONT_KEYS.filter(k => FONT_DEFS[k].family);
+  await Promise.all(keys.map(k => ensureFontLoaded(k)));
+  try { await document.fonts.ready; } catch (e) {}
+}
+function isFontReady(key) {
+  const f = fontSpec(key);
+  if (!f.family) return true;
+  if (!document.fonts) return false;
+  try { return document.fonts.check(`400 48px "${f.family}"`, '가나다'); } catch (e) { return false; }
 }
 
 function sampleProject(id = DEFAULT_SAMPLE_ID) {
@@ -495,8 +653,8 @@ const mctx = miniCanvas.getContext('2d');
 
 function styleFor(cut) {
   const base = project.style || DEFAULT_STYLE;
-  if (cut && cut.style) return { ...base, ...cut.style };
-  return base;
+  if (cut && cut.style) return normalizeStyle(cut.style, base);
+  return normalizeStyle(base, DEFAULT_STYLE);
 }
 
 function totalDuration() {
@@ -535,7 +693,45 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawCover(ctx, img, W, H, zoom) {
+const easeOutBack = u => {
+  const c1 = 1.70158, c3 = c1 + 1;
+  const x = clamp(u, 0, 1);
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
+function hexToRgba(hex, a) {
+  const h = hexColor(hex, '#ffffff').slice(1);
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/* 카메라(모션) — scale 1 이상, x/y는 -1~1 (확대된 여백 안에서의 위치) */
+function cameraFor(cut, index, p, localT) {
+  const motion = motionFor(cut, index);
+  const q = clamp(p, 0, 1);
+  switch (motion) {
+    case 'none':
+      return { scale: 1, x: 0, y: 0 };
+    case 'zoomIn':
+      return { scale: 1.02 + 0.10 * q, x: 0, y: 0 };
+    case 'zoomOut':
+      return { scale: 1.12 - 0.10 * q, x: 0, y: 0 };
+    case 'panLR':
+      return { scale: 1.16, x: 1 - 2 * q, y: 0 };
+    case 'panRL':
+      return { scale: 1.16, x: -1 + 2 * q, y: 0 };
+    case 'shake': {
+      const decay = Math.max(0, 1 - localT / 0.9);
+      const amp = 0.11 * decay * decay;
+      return { scale: 1.08 + 0.02 * q, x: Math.sin(localT * 42) * amp, y: Math.cos(localT * 33) * amp * 0.6 };
+    }
+    default: /* auto — 기존 Ken Burns */
+      return { scale: index % 2 === 0 ? 1.02 + 0.06 * q : 1.08 - 0.06 * q, x: 0, y: 0 };
+  }
+}
+
+function drawCover(ctx, img, W, H, cam) {
+  const c = cam || { scale: 1, x: 0, y: 0 };
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
   if (!iw || !ih) return;
@@ -544,8 +740,12 @@ function drawCover(ctx, img, W, H, zoom) {
   let dw, dh;
   if (ir > cr) { dh = H; dw = H * ir; }
   else { dw = W; dh = W / ir; }
-  dw *= zoom; dh *= zoom;
-  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  const s = Math.max(1, c.scale || 1);
+  dw *= s; dh *= s;
+  const ox = dw - W, oy = dh - H;
+  const dx = (W - dw) / 2 + (c.x || 0) * ox / 2;
+  const dy = (H - dh) / 2 + (c.y || 0) * oy / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
 }
 
 function drawImagePlaceholder(ctx, W, H) {
@@ -614,14 +814,20 @@ function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
   const scale = W / DESIGN_W;
   const fontSize = Math.max(8, st.fontSize * scale);
   const weight = STYLE_WEIGHTS.includes(Number(st.weight)) ? Number(st.weight) : 800;
+  const family = fontStackFor(st.font);
   const maxWidth = W * 0.88;
   const t = Math.max(0, Number(localTime) || 0);
   const dur = Math.max(0.2, Number(cutDuration) || 0.2);
+  const bgStyle = normalizeBg(st.bg);
+  const isBox = bgStyle !== 'none';
+  const align = normalizeAlign(st.align);
+  const shadowK = clamp((Number(st.shadow) || 0) / 100, 0, 1);
 
   /* --- 효과별 등장 파라미터 (미리보기·내보내기 공통, 컷 안의 경과 시간 기준) --- */
   let alpha = 1, kScale = 1, dx = 0, dy = 0;
   let drawText = fullText;
   let hlCount = -1;          // highlight: 앞에서 몇 개 단어까지 강조할지
+  let letterMode = false;
 
   if (effect === 'pop') {
     // 0.3초 동안 0.65 → 1.08 → 1.0 탄성 바운스
@@ -630,6 +836,11 @@ function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
     kScale = k < 0.6
       ? 0.65 + 0.43 * easeOutCubic(k / 0.6)
       : 1.08 - 0.08 * easeOutCubic((k - 0.6) / 0.4);
+  } else if (effect === 'zoomIn') {
+    // 작고 흐리게 시작해 확 커지며 등장
+    const k = clamp(t / 0.45, 0, 1);
+    kScale = 0.42 + 0.58 * easeOutBack(k);
+    alpha = clamp(t / 0.16, 0, 1);
   } else if (effect === 'slideUp') {
     // 아래에서 28px 올라오며 페이드인
     const k = easeOutCubic(clamp(t / 0.35, 0, 1));
@@ -643,6 +854,13 @@ function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
     const shake = t < 0.3 ? 1 - t / 0.3 : 0;
     dx = Math.sin(t * 78) * 5 * scale * shake;
     dy = Math.cos(t * 63) * 2 * scale * shake;
+  } else if (effect === 'shake') {
+    // 등장하며 톡톡 떨리고 잦아든다
+    alpha = clamp(t / 0.08, 0, 1);
+    const decay = Math.max(0, 1 - t / 0.75);
+    const amp = (7 * decay * decay + 1.2) * scale;
+    dx = Math.sin(t * 52) * amp;
+    dy = Math.cos(t * 41) * amp * 0.55;
   } else if (effect === 'typing') {
     // 컷 앞부분에서 한 글자씩 (10~45자/초)
     const chars = Array.from(fullText);
@@ -655,56 +873,101 @@ function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
     const words = fullText.split(/\s+/).filter(Boolean).length;
     const k = clamp((t - 0.1) / Math.max(0.6, dur * 0.75), 0, 1);
     hlCount = Math.ceil(k * words);
+  } else if (effect === 'letterPop') {
+    letterMode = true;
   }
 
   ctx.save();
-  ctx.font = `${weight} ${fontSize}px ${FONT_STACK}`;
+  ctx.font = `${weight} ${fontSize}px ${family}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (alpha < 1) ctx.globalAlpha = alpha;
+  if (alpha < 1) ctx.globalAlpha = clamp(alpha, 0, 1);
 
   const lines = wrapText(ctx, drawText, maxWidth);
   const lh = fontSize * 1.34;
-  const blockH = lines.length * lh;
+  const blockH = Math.max(lh, lines.length * lh);
+  const marginX = W * 0.06;
+  const anchorX = align === 'left' ? marginX : align === 'right' ? W - marginX : W / 2;
+
   let top;
   if (st.position === 'top') top = H * 0.085;
   else if (st.position === 'center') top = (H - blockH) / 2;
   else top = H - H * 0.135 - blockH;
+  top += H * (Number(st.offsetY) || 0) / 100;
   top = clamp(top, H * 0.035, Math.max(H * 0.035, H - blockH - H * 0.035));
 
   const padX = fontSize * 0.46;
-  const padY = fontSize * 0.2;
-  const isBox = st.bg === 'dark' || st.bg === 'light';
-  const baseColor = isBox ? (st.bg === 'dark' ? '#ffffff' : '#111318') : '#ffffff';
+  const padY = fontSize * 0.22;
 
-  /* 확대·이동은 자막 덩어리 중심을 기준으로 적용 */
+  /* 확대·이동은 자막 덩어리 기준점을 중심으로 적용 */
   if (kScale !== 1 || dx || dy) {
     const cy = top + blockH / 2;
-    ctx.translate(W / 2 + dx, cy + dy);
+    ctx.translate(anchorX + dx, cy + dy);
     ctx.scale(kScale, kScale);
-    ctx.translate(-W / 2, -cy);
+    ctx.translate(-anchorX, -cy);
   }
+
+  const lineWidths = lines.map(l => ctx.measureText(l || ' ').width);
+  const maxLineW = Math.max(1, ...lineWidths);
 
   // 배경 박스는 줄마다 따로 그리지 않고 한 덩어리로 그려 깔끔하게 유지한다.
   if (isBox) {
-    let maxLineW = 0;
-    for (const line of lines) maxLineW = Math.max(maxLineW, ctx.measureText(line || ' ').width);
     const boxW = Math.min(maxLineW + padX * 2, maxWidth + padX * 2);
     const boxH = blockH + padY * 2;
-    ctx.fillStyle = st.bg === 'dark' ? 'rgba(8,9,12,0.68)' : 'rgba(255,255,255,0.93)';
-    roundRect(ctx, W / 2 - boxW / 2, top - padY, boxW, boxH, fontSize * 0.22);
+    const bx = align === 'left' ? anchorX - padX
+      : align === 'right' ? anchorX + padX - boxW
+        : W / 2 - boxW / 2;
+    const radius = bgStyle === 'pill' ? boxH / 2 : fontSize * 0.24;
+    let fill = 'rgba(8,9,12,0.68)';
+    if (bgStyle === 'light') fill = 'rgba(255,255,255,0.93)';
+    else if (bgStyle === 'color') fill = hexToRgba(st.bgColor, 0.86);
+    else if (bgStyle === 'pill') fill = hexToRgba(st.bgColor, 0.92);
+    ctx.save();
+    ctx.fillStyle = fill;
+    roundRect(ctx, bx, top - padY, boxW, boxH, radius);
     ctx.fill();
-  } else {
+    ctx.restore();
+  }
+
+  const outlinePx = (Number(st.outline) || 0) * scale;
+  // 박스 없이 사진 위에 얹을 때는 최소한의 외곽선을 자동으로 넣어 읽히게 한다.
+  const strokeW = bgStyle === 'none' ? Math.max(outlinePx, fontSize * 0.10) : outlinePx;
+  const baseColor = st.color;
+
+  const setShadow = on => {
+    if (on && shadowK > 0) {
+      ctx.shadowColor = `rgba(0,0,0,${(0.72 * shadowK).toFixed(3)})`;
+      ctx.shadowBlur = fontSize * 0.42 * shadowK;
+      ctx.shadowOffsetY = fontSize * 0.07 * shadowK;
+    } else {
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+    }
+  };
+  const strokeTextAt = (text, x, y, limit) => {
+    if (strokeW <= 0.2) return;
+    setShadow(false);
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
-    ctx.strokeStyle = 'rgba(0,0,0,.86)';
-    ctx.lineWidth = Math.max(2, fontSize * 0.16);
-  }
-  ctx.fillStyle = baseColor;
+    ctx.strokeStyle = st.outlineColor;
+    ctx.lineWidth = strokeW;
+    if (limit) ctx.strokeText(text, x, y, limit);
+    else ctx.strokeText(text, x, y);
+  };
+  const paintText = (text, x, y, limit) => {
+    strokeTextAt(text, x, y, limit);
+    setShadow(true);
+    ctx.fillStyle = baseColor;
+    if (limit) ctx.fillText(text, x, y, limit);
+    else ctx.fillText(text, x, y);
+    setShadow(false);
+  };
 
   if (effect === 'highlight') {
-    // 단어 단위로 배치해 강조된 단어만 형광색/형광펜으로 그린다.
+    // 단어 단위로 배치해 강조된 단어만 형광펜으로 그린다.
     const spaceW = ctx.measureText(' ').width;
+    ctx.textAlign = 'left';
     let wordIndex = 0;
     lines.forEach((line, i) => {
       if (!line) return;
@@ -712,91 +975,156 @@ function drawSubtitle(ctx, cut, W, H, localTime = 0, cutDuration = 1) {
       const words = line.split(/\s+/).filter(Boolean);
       const widths = words.map(w => ctx.measureText(w).width);
       const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, words.length - 1);
-      let x = W / 2 - totalW / 2;
+      let x = align === 'left' ? anchorX : align === 'right' ? anchorX - totalW : anchorX - totalW / 2;
       words.forEach((word, j) => {
         const active = wordIndex + j < hlCount;
         const cw = widths[j];
-        const cx = x + cw / 2;
         if (active) {
-          if (st.bg === 'light') {
-            ctx.save();
-            ctx.fillStyle = 'rgba(255,225,77,.95)';
-            roundRect(ctx, x - fontSize * 0.07, y - fontSize * 0.62, cw + fontSize * 0.14, fontSize * 1.24, fontSize * 0.15);
-            ctx.fill();
-            ctx.restore();
-            ctx.fillStyle = '#141414';
-            ctx.fillText(word, cx, y, maxWidth);
-          } else {
-            ctx.save();
-            ctx.shadowColor = 'rgba(255,214,51,.7)';
-            ctx.shadowBlur = fontSize * 0.4;
-            ctx.fillStyle = '#ffe14d';
-            if (!isBox) ctx.strokeText(word, cx, y, maxWidth);
-            ctx.fillText(word, cx, y, maxWidth);
-            ctx.restore();
-          }
+          ctx.save();
+          ctx.fillStyle = 'rgba(255,225,77,.95)';
+          roundRect(ctx, x - fontSize * 0.06, y - fontSize * 0.62, cw + fontSize * 0.12, fontSize * 1.24, fontSize * 0.15);
+          ctx.fill();
+          ctx.restore();
+          ctx.save();
+          ctx.fillStyle = '#141414';
+          setShadow(false);
+          ctx.fillText(word, x, y);
+          ctx.restore();
         } else {
-          ctx.fillStyle = baseColor;
-          if (!isBox) ctx.strokeText(word, cx, y, maxWidth);
-          ctx.fillText(word, cx, y, maxWidth);
+          paintText(word, x, y);
         }
         x += cw + spaceW;
       });
       wordIndex += words.length;
     });
-  } else {
+  } else if (letterMode) {
+    // 글자마다 톡톡 튀어나오는 등장
+    let gi = 0;
     lines.forEach((line, i) => {
-      const y = top + i * lh + lh / 2;
       if (!line) return;
-      if (isBox) {
-        ctx.fillText(line, W / 2, y, maxWidth);
-      } else {
-        ctx.strokeText(line, W / 2, y, maxWidth);
-        ctx.fillText(line, W / 2, y, maxWidth);
-      }
+      const y = top + i * lh + lh / 2;
+      const chars = Array.from(line);
+      const widths = chars.map(ch => ctx.measureText(ch).width);
+      const totalW = widths.reduce((a, b) => a + b, 0);
+      let x = align === 'left' ? anchorX : align === 'right' ? anchorX - totalW : anchorX - totalW / 2;
+      ctx.textAlign = 'center';
+      chars.forEach((ch, j) => {
+        const w = widths[j];
+        const cx = x + w / 2;
+        const delay = gi * 0.035;
+        const k = clamp((t - delay) / 0.22, 0, 1);
+        if (ch.trim() && k > 0) {
+          const sc = 0.35 + 0.65 * easeOutBack(k);
+          ctx.save();
+          ctx.translate(cx, y);
+          ctx.scale(sc, sc);
+          ctx.globalAlpha = clamp(alpha * Math.min(1, k * 1.6), 0, 1);
+          paintText(ch, 0, 0);
+          ctx.restore();
+        }
+        x += w;
+        gi++;
+      });
+    });
+  } else {
+    ctx.textAlign = align;
+    lines.forEach((line, i) => {
+      if (!line) return;
+      const y = top + i * lh + lh / 2;
+      paintText(line, anchorX, y, maxWidth);
     });
   }
   ctx.restore();
 }
 
-function drawFrame(t, ctx, W, H) {
+/* 장면 하나(이미지+모션+자막)를 그린다. 전환 효과에서 두 장면을 겹칠 때도 쓴다. */
+const sceneBuffers = new Map();
+function sceneBuffer(key, W, H) {
+  const id = `${key}:${W}x${H}`;
+  let b = sceneBuffers.get(id);
+  if (!b) {
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    b = { canvas: c, ctx: c.getContext('2d') };
+    sceneBuffers.set(id, b);
+  }
+  return b;
+}
+
+function renderScene(ctx, index, localT, W, H, opts) {
+  const cut = project.cuts[index];
   ctx.save();
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
+  if (!cut) { ctx.restore(); return; }
+  const dur = Math.max(0.5, Number(cut.duration) || 0.5);
+  const p = clamp(localT / dur, 0, 1);
+  const url = imageUrl(cut);
+  if (url) {
+    const rec = imgCache.get(url);
+    if (rec && rec.ok) {
+      drawCover(ctx, rec.img, W, H, cameraFor(cut, index, p, localT));
+    } else {
+      drawImagePlaceholder(ctx, W, H);
+      // 이미지가 늦게 로드되면 한 번 다시 그린다.
+      loadImage(url).then(img => {
+        if (img && !playing && !exporting) drawAll(currentTime);
+      });
+    }
+  } else {
+    drawImagePlaceholder(ctx, W, H);
+  }
+  /* 정지 상태에서 컷 시작(0초)에 서 있으면 등장 모션이 아직 0프레임이라
+     자막이 안 보인다. 편집 중에는 자리 잡은 모습을 보여 준다. */
+  const settle = !!(opts && opts.settle) && localT < 0.06;
+  drawSubtitle(ctx, cut, W, H, settle ? Math.min(dur, 0.6) : localT, dur);
+  ctx.restore();
+}
 
+function drawFrame(t, ctx, W, H) {
+  ctx.save();
   const cuts = project ? project.cuts : [];
   if (!cuts.length) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
     drawImagePlaceholder(ctx, W, H);
     ctx.restore();
     return;
   }
 
   const pos = locate(t);
-  const cut = pos.cut;
-  const url = imageUrl(cut);
+  const trans = transitionFor(pos.cut);
+  const trDur = TRANSITION_DUR[trans] || 0;
 
-  if (url) {
-    const rec = imgCache.get(url);
-    if (rec && rec.ok) {
-      const dur = Math.max(0.5, Number(cut.duration) || 0.5);
-      const p = clamp(pos.local / dur, 0, 1);
-      let zoom = 1;
-      if (project.options.kenBurns) {
-        zoom = pos.index % 2 === 0 ? 1.02 + 0.06 * p : 1.08 - 0.06 * p;
-      }
-      drawCover(ctx, rec.img, W, H, zoom);
+  // 컷이 바뀌는 앞부분에서는 이전 컷과 현재 컷을 겹쳐 그린다.
+  if (pos.index > 0 && trDur > 0 && pos.local < trDur) {
+    const k = clamp(pos.local / trDur, 0, 1);
+    const prevIdx = pos.index - 1;
+    const prevDur = Math.max(0.5, Number(cuts[prevIdx].duration) || 0.5);
+    const a = sceneBuffer('prev', W, H);
+    const b = sceneBuffer('cur', W, H);
+    const settleNow = !playing && !exporting;
+    renderScene(a.ctx, prevIdx, prevDur - 0.001, W, H, { settle: settleNow });
+    renderScene(b.ctx, pos.index, pos.local, W, H, { settle: settleNow });
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (trans === 'slide') {
+      const e = easeOutCubic(k);
+      ctx.drawImage(a.canvas, -W * 0.28 * e, 0);
+      ctx.drawImage(b.canvas, W * (1 - e), 0);
     } else {
-      drawImagePlaceholder(ctx, W, H);
-      // 이미지가 늦게 로드되면 한 번 다시 그린다.
-      loadImage(url).then(img => {
-        if (img && !playing) drawAll(currentTime);
-      });
+      ctx.globalAlpha = 1;
+      ctx.drawImage(a.canvas, 0, 0);
+      ctx.globalAlpha = k;
+      ctx.drawImage(b.canvas, 0, 0);
+      ctx.globalAlpha = 1;
     }
-  } else {
-    drawImagePlaceholder(ctx, W, H);
+    ctx.restore();
+    return;
   }
 
-  drawSubtitle(ctx, cut, W, H, pos.local, Math.max(0.5, Number(cut.duration) || 0.5));
+  renderScene(ctx, pos.index, pos.local, W, H, { settle: !playing && !exporting });
   ctx.restore();
 }
 
@@ -1018,8 +1346,120 @@ function attachToneChain(ctx, src, tone) {
   return node;
 }
 
+/* ---------- 내장 효과음 합성 (Web Audio) ---------- */
+/* 외부 파일 없이 오실레이터·노이즈를 직접 계산해 만든다. */
+const sfxCache = new Map();   // `${id}@${sampleRate}` -> AudioBuffer
+
+function buildSfxBuffer(ctx, id) {
+  const sr = ctx.sampleRate;
+  const dur = SFX_DUR[id] || 0.5;
+  const len = Math.max(1, Math.ceil(dur * sr));
+  const buf = ctx.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  const TAU = Math.PI * 2;
+  let lp = 0, lp2 = 0, prevNoise = 0, ph = 0, ph2 = 0;
+  const noise = () => Math.random() * 2 - 1;
+
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    let s = 0;
+    if (id === 'ding') {
+      const env = Math.exp(-t * 5.2) * Math.min(1, t / 0.004);
+      s = Math.sin(TAU * 1046.5 * t) * 0.62
+        + Math.sin(TAU * 1568 * t) * 0.3 * Math.exp(-t * 3)
+        + Math.sin(TAU * 2093 * t) * 0.14 * Math.exp(-t * 6);
+      s *= env;
+    } else if (id === 'boing') {
+      const env = Math.exp(-t * 4.2) * Math.min(1, t / 0.005);
+      const f = 170 + 640 * Math.exp(-t * 5.5) + 55 * Math.sin(TAU * 13 * t);
+      ph += TAU * f / sr;
+      s = (Math.sin(ph) * 0.78 + Math.sin(ph * 2) * 0.12) * env;
+    } else if (id === 'boom') {
+      const env = Math.exp(-t * 3.0) * Math.min(1, t / 0.006);
+      const f = 34 + 66 * Math.exp(-t * 4);
+      ph2 += TAU * f / sr;
+      const n = noise();
+      lp += 0.010 * (n - lp);
+      s = Math.sin(ph2) * env * 0.82 + lp * Math.exp(-t * 7) * 2.6;
+    } else if (id === 'click') {
+      const n = noise();
+      const hp = n - prevNoise;
+      prevNoise = n;
+      const hit = (t0, amp) => {
+        if (t < t0) return 0;
+        const u = t - t0;
+        return Math.exp(-u * 90) * Math.min(1, u / 0.001) * amp;
+      };
+      s = (hit(0, 0.85) + hit(0.055, 0.62)) * hp * 1.1;
+    } else if (id === 'whoosh') {
+      const u = clamp(t / dur, 0, 1);
+      const env = Math.sin(Math.PI * u) ** 2;
+      const cutoff = 400 + 5200 * Math.sin(Math.PI * u);
+      const a = clamp(cutoff / sr * 1.2, 0.002, 0.9);
+      const n = noise();
+      lp += a * (n - lp);
+      lp2 += 0.09 * (lp - lp2);
+      s = (lp - lp2) * env * 1.15;
+    } else if (id === 'tada') {
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      const starts = [0, 0.09, 0.18, 0.27];
+      for (let k = 0; k < notes.length; k++) {
+        if (t < starts[k]) continue;
+        const u = t - starts[k];
+        const env = Math.exp(-u * (k === 3 ? 2.2 : 6)) * Math.min(1, u / 0.004);
+        s += Math.sin(TAU * notes[k] * u) * env * (k === 3 ? 0.5 : 0.4);
+        if (k === 3) s += Math.sin(TAU * notes[k] * 2 * u) * env * 0.1;
+      }
+    }
+    // 마지막 6ms는 부드럽게 (딸깍 소리 방지)
+    const tail = (len - i) / (sr * 0.006);
+    d[i] = s * clamp(tail, 0, 1);
+  }
+
+  // 피크 정규화
+  let peak = 0;
+  for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
+  if (peak > 0) {
+    const k = 0.88 / peak;
+    for (let i = 0; i < len; i++) d[i] *= k;
+  }
+  return buf;
+}
+
+function sfxBuffer(ctx, id) {
+  if (!id || id === 'none') return null;
+  if (!SFX_DUR[id]) return null;
+  const key = `${id}@${ctx.sampleRate}`;
+  if (!sfxCache.has(key)) {
+    try { sfxCache.set(key, buildSfxBuffer(ctx, id)); } catch (e) { console.warn('효과음을 만들지 못했어요', e); return null; }
+  }
+  return sfxCache.get(key);
+}
+
+/* 효과음 미리듣기 (편집 중 ▶ 효과음 재생) */
+function previewSfx(id, volume) {
+  const ctx = getAudioCtx();
+  if (!ctx) return false;
+  const buf = sfxBuffer(ctx, id);
+  if (!buf) return false;
+  try {
+    ctx.resume().catch(() => {});
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.value = clamp(volume == null ? 0.6 : volume, 0, 1);
+    src.connect(gain).connect(ctx.destination);
+    src.start();
+    return true;
+  } catch (e) {
+    console.warn('효과음 재생 실패', e);
+    return false;
+  }
+}
+
 function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes = activeSources) {
   const cuts = project.cuts;
+  const total = totalDuration();
   const lead = 0.06;
   const now = ctx.currentTime + lead;
   let acc = 0;
@@ -1029,26 +1469,44 @@ function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes
     if (cut.audio && cut.audio.key) {
       const buf = buffers.get(cut.audio.key);
       const tone = toneFor(cut);
-      // 톤(배속)이 적용된 뒤 타임라인에서 차지하는 길이
-      const clipDur = buf ? buf.duration / tone.rate : 0;
+      const rate = tonalPlaybackRate(cut);
+      // 톤·배속이 적용된 뒤 타임라인에서 차지하는 길이
+      const clipDur = buf ? buf.duration / rate : 0;
       if (buf && acc + dur > fromTime && clipDur > 0) {
         const offset = Math.max(0, fromTime - acc);
         if (offset < clipDur) {
           try {
             const src = ctx.createBufferSource();
             src.buffer = buf;
-            src.playbackRate.value = tone.rate;
+            src.playbackRate.value = rate;
             const gain = ctx.createGain();
-            gain.gain.value = clamp(project.options.voiceVolume ?? 1, 0, 1);
+            gain.gain.value = voiceVolumeFor(cut);
             attachToneChain(ctx, src, tone).connect(gain).connect(destination);
             // 컷 길이를 넘어 다음 컷으로 소리가 새지 않도록 잘라서 재생한다.
             // start()의 offset/duration은 버퍼 시간 기준이므로 배속을 곱해 환산한다.
             const remainingInCut = dur - offset;
             const playDur = Math.max(0.02, Math.min(clipDur - offset, remainingInCut));
-            src.start(now + Math.max(0, acc - fromTime), offset * tone.rate, playDur * tone.rate);
+            src.start(now + Math.max(0, acc - fromTime), offset * rate, playDur * rate);
             nodes.push(src);
           } catch (e) { console.warn('음성 재생 실패', e); }
         }
+      }
+    }
+
+    // 컷 시작 지점의 효과음
+    const sfx = sfxFor(cut);
+    if (sfx.id !== 'none' && acc >= fromTime - 0.02 && acc < total) {
+      const buf = sfxBuffer(ctx, sfx.id);
+      if (buf) {
+        try {
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          const gain = ctx.createGain();
+          gain.gain.value = clamp(sfx.volume, 0, 1);
+          src.connect(gain).connect(destination);
+          src.start(now + Math.max(0, acc - fromTime));
+          nodes.push(src);
+        } catch (e) { console.warn('효과음 재생 실패', e); }
       }
     }
     acc += dur;
@@ -1061,8 +1519,21 @@ function scheduleAudio(ctx, destination, fromTime, buffers = audioBuffers, nodes
         const src = ctx.createBufferSource();
         src.buffer = bgmBuf;
         src.loop = true;
+        const vol = clamp(project.options.bgmVolume ?? 0.2, 0, 1);
         const gain = ctx.createGain();
-        gain.gain.value = clamp(project.options.bgmVolume ?? 0.2, 0, 1);
+        const fadeIn = clamp(Number(project.options.bgmFadeIn) || 0, 0, 3);
+        const fadeOut = clamp(Number(project.options.bgmFadeOut) || 0, 0, 3);
+        const remain = Math.max(0, total - fromTime);
+        gain.gain.setValueAtTime(vol, now);
+        if (fadeIn > 0 && fromTime < fadeIn) {
+          gain.gain.setValueAtTime(vol * clamp(fromTime / fadeIn, 0, 1), now);
+          gain.gain.linearRampToValueAtTime(vol, now + Math.max(0.01, fadeIn - fromTime));
+        }
+        if (fadeOut > 0 && remain <= fadeOut) {
+          const startFade = Math.max(0, remain - fadeOut);
+          gain.gain.setValueAtTime(vol, now + startFade);
+          gain.gain.linearRampToValueAtTime(0, now + remain);
+        }
         src.connect(gain).connect(destination);
         const offset = bgmBuf.duration ? (fromTime % bgmBuf.duration) : 0;
         src.start(now, offset);
@@ -1684,10 +2155,11 @@ function setCutTone(cut, tone) {
   toast(`목소리 톤 · ${TONE_LABEL[next]}`);
 }
 
-/* 컷 카드의 <audio> 미리듣기에도 변조 속도·피치를 반영 */
+/* 컷 카드의 <audio> 미리듣기에도 톤·배속·볼륨을 반영 */
 function applyToneToPlayer(el, cut) {
   if (!el || !cut) return;
-  const rate = toneFor(cut).rate;
+  const rate = tonalPlaybackRate(cut);
+  const vol = voiceVolumeFor(cut);
   const apply = () => {
     try {
       el.preservesPitch = false;
@@ -1695,6 +2167,7 @@ function applyToneToPlayer(el, cut) {
       el.webkitPreservesPitch = false;
     } catch (e) {}
     try { el.playbackRate = rate; } catch (e) {}
+    try { el.volume = clamp(vol, 0, 1); } catch (e) {}
   };
   apply();
   el.addEventListener('loadedmetadata', apply, { once: true });
@@ -1718,10 +2191,23 @@ function cutCardHtml(cut, index, total) {
   const aiBusy = aiBusyCuts.has(cut.id);
   const audioUrl = hasAudio ? mediaUrl(cut.audio.key) : null;
   const tone = normalizeTone(cut.tone);
-  const toneRate = TONE_PRESETS[tone].rate;
+  const rate = tonalPlaybackRate(cut);
   const rawDur = hasAudio && cut.audio.duration ? cut.audio.duration : 0;
-  const effDur = rawDur / toneRate;
+  const effDur = rawDur / rate;
   const num = index + 1;
+
+  /* 이 컷만 따로 지정한 값 (없으면 전체 설정을 따름) */
+  const motionOwn = cut.motion ? normalizeMotion(cut.motion) : '';
+  const transOwn = cut.transition ? normalizeTransition(cut.transition) : '';
+  const sfxOwn = cut.sfx && cut.sfx.id ? normalizeSfx(cut.sfx.id) : '';
+  const sfxVol = cut.sfx && cut.sfx.volume != null
+    ? clamp(cut.sfx.volume, 0, 1)
+    : clamp(project.options.sfxVolume ?? 0.6, 0, 1);
+  const vRateOwn = cut.voiceRate != null;
+  const vVolOwn = cut.voiceVolume != null;
+  const vRate = voiceRateFor(cut);
+  const vVol = voiceVolumeFor(cut);
+  const custom = !!(cut.style || motionOwn || transOwn || sfxOwn || vRateOwn || vVolOwn);
 
   const seg = (field, opts, current) => `
     <div class="segmented" data-style-seg="${field}">
@@ -1766,34 +2252,92 @@ function cutCardHtml(cut, index, total) {
                 ${TONE_KEYS.map(k => `<button type="button" class="chip tone-chip ${tone === k ? 'on' : ''}" data-tone="${k}" title="${escapeAttr(TONE_DESC[k])}" aria-pressed="${tone === k ? 'true' : 'false'}">${TONE_LABEL[k]}</button>`).join('')}
               </div>
             </div>
-            <div class="audio-state"><b>${escapeHtml(cut.audio.name || '음성')}</b>${rawDur ? ` · ${rawDur.toFixed(1)}초` : ''}${rawDur && toneRate !== 1 ? ` → 변조 후 ${effDur.toFixed(1)}초` : ''}</div>` : ''}
+            <div class="audio-state"><b>${escapeHtml(cut.audio.name || '음성')}</b>${rawDur ? ` · ${rawDur.toFixed(1)}초` : ''}${rawDur && rate !== 1 ? ` → 변조 후 ${effDur.toFixed(1)}초` : ''}${` · ${rate.toFixed(2)}x`}</div>` : ''}
           <label class="toggle small"><input type="checkbox" data-field="autoFit" ${cut.autoFit ? 'checked' : ''}><span>음성 길이에 맞추기</span></label>
           <input type="file" data-field="imageFile" accept="image/*" hidden>
           <input type="file" data-field="audioFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
         </div>
-        <details class="cut-style" ${cut.style ? 'open' : ''}>
-          <summary>이 컷만 스타일${cut.style ? ' <span class="tag">사용 중</span>' : ''}</summary>
+        <details class="cut-style" ${custom ? 'open' : ''}>
+          <summary>🎛 이 컷만 따로 설정${custom ? ' <span class="tag">사용 중</span>' : ''}</summary>
           <div class="style-body">
+            <div class="mini-title">🎬 화면 · 전환 · 효과음</div>
+            <div class="style-grid">
+              <label class="field">화면 모션
+                <select data-field="motion">
+                  <option value="">전체 따르기</option>
+                  ${MOTION_KEYS.map(k => `<option value="${k}" ${motionOwn === k ? 'selected' : ''}>${MOTION_LABEL[k]}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field">전환 효과
+                <select data-field="transition">
+                  <option value="">전체 따르기</option>
+                  ${TRANSITION_KEYS.map(k => `<option value="${k}" ${transOwn === k ? 'selected' : ''}>${TRANSITION_LABEL[k]}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field">효과음
+                <select data-field="sfxId">
+                  <option value="">전체 따르기</option>
+                  ${SFX_KEYS.map(k => `<option value="${k}" ${sfxOwn === k ? 'selected' : ''}>${SFX_LABEL[k]}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field">효과음 볼륨 <output data-sfx-out>${Math.round(sfxVol * 100)}%</output>
+                <input type="range" data-field="sfxVol" min="0" max="100" step="1" value="${Math.round(sfxVol * 100)}">
+              </label>
+              <div class="field wide">
+                <button type="button" class="chip small" data-act="sfxPreview">🔊 이 컷 효과음 들어보기</button>
+              </div>
+            </div>
+
+            <div class="style-sep"></div>
+            <div class="mini-title">🎚 이 컷 목소리 (${vRateOwn || vVolOwn ? '따로 설정' : '전체 따르기'})</div>
+            <div class="style-grid">
+              <label class="field">배속 <output data-rate-out>${vRate.toFixed(2)}x</output>
+                <input type="range" data-field="voiceRate" min="0.8" max="1.5" step="0.05" value="${vRate}">
+              </label>
+              <label class="field">볼륨 <output data-vol-out>${Math.round(vVol * 100)}%</output>
+                <input type="range" data-field="voiceVol" min="0" max="100" step="1" value="${Math.round(vVol * 100)}">
+              </label>
+              <div class="field wide">
+                <button type="button" class="chip small" data-act="inheritVoice">↺ 목소리 전체 값 따르기</button>
+              </div>
+            </div>
+
+            <div class="style-sep"></div>
+            <div class="mini-title">🔤 이 컷 자막 스타일</div>
             <label class="toggle small"><input type="checkbox" data-style-enable ${cut.style ? 'checked' : ''}><span>이 컷만 다르게 적용</span></label>
             <div class="style-grid" ${cut.style ? '' : 'hidden'}>
+              <label class="field">글꼴
+                <select data-style="font">
+                  ${FONT_KEYS.map(k => `<option value="${k}" ${normalizeFont(st.font) === k ? 'selected' : ''}>${FONT_DEFS[k].label}</option>`).join('')}
+                </select>
+              </label>
               <label class="field">글자 크기 <output data-style-out>${st.fontSize}</output>
-                <input type="range" data-style="fontSize" min="32" max="110" step="1" value="${st.fontSize}">
+                <input type="range" data-style="fontSize" min="28" max="120" step="1" value="${st.fontSize}">
               </label>
               <label class="field">굵기
                 <select data-style="weight">
                   ${STYLE_WEIGHTS.map(w => `<option value="${w}" ${Number(st.weight) === w ? 'selected' : ''}>${WEIGHT_LABEL[w]}</option>`).join('')}
                 </select>
               </label>
-              <div class="field"><span class="field-label">위치</span>
-                ${seg('position', [['top', '상단'], ['center', '중앙'], ['bottom', '하단']], st.position)}
-              </div>
-              <div class="field"><span class="field-label">배경</span>
-                ${seg('bg', [['dark', '검정'], ['light', '흰색'], ['none', '없음']], st.bg)}
-              </div>
-              <label class="field wide">자막 효과
+              <label class="field">자막 효과
                 <select data-style="effect">
                   ${SUBTITLE_EFFECTS.map(v => `<option value="${v}" title="${escapeAttr(EFFECT_DESC[v])}" ${normalizeEffect(st.effect) === v ? 'selected' : ''}>${EFFECT_LABEL[v]}</option>`).join('')}
                 </select>
+              </label>
+              <div class="field"><span class="field-label">위치</span>
+                ${seg('position', [['top', '상단'], ['center', '중앙'], ['bottom', '하단']], st.position)}
+              </div>
+              <div class="field"><span class="field-label">정렬</span>
+                ${seg('align', [['left', '왼쪽'], ['center', '가운데'], ['right', '오른쪽']], st.align)}
+              </div>
+              <div class="field wide"><span class="field-label">배경 박스</span>
+                ${seg('bg', [['dark', '검정'], ['light', '흰색'], ['none', '없음'], ['color', '컬러'], ['pill', '알약']], st.bg)}
+              </div>
+              <div class="field"><span class="field-label">글자색</span>
+                <div class="color-row"><input type="color" data-style="color" value="${st.color}" aria-label="이 컷 글자색"></div>
+              </div>
+              <label class="field">외곽선 <output data-style-out>${st.outline}</output>
+                <input type="range" data-style="outline" min="0" max="14" step="1" value="${st.outline}">
               </label>
             </div>
           </div>
@@ -1906,17 +2450,60 @@ cutListEl.addEventListener('input', e => {
     scheduleSave();
     return;
   }
+  if (field === 'sfxVol') {
+    const v = clamp((parseFloat(el.value) || 0) / 100, 0, 1);
+    const baseId = cut.sfx && cut.sfx.id ? cut.sfx.id : project.options.sfxId;
+    cut.sfx = { id: normalizeSfx(baseId), volume: v };
+    const out = $('[data-sfx-out]', card);
+    if (out) out.textContent = Math.round(v * 100) + '%';
+    scheduleSave();
+    return;
+  }
+  if (field === 'voiceRate') {
+    const v = clamp(parseFloat(el.value) || 1, 0.8, 1.5);
+    cut.voiceRate = v;
+    const out = $('[data-rate-out]', card);
+    if (out) out.textContent = v.toFixed(2) + 'x';
+    if (cut.autoFit && cut.audio && cut.audio.duration > 0) {
+      cut.duration = clamp(Math.round((tonalDuration(cut.audio.duration, cut) + 0.25) * 10) / 10, 0.5, 120);
+      const range = $('[data-field="duration"]', card);
+      if (range) range.value = String(cut.duration);
+      const num = $('[data-field="durationNum"]', card);
+      if (num) num.value = cut.duration.toFixed(1);
+      updateDurLabel(card, cut.duration);
+    }
+    recalcTimeline();
+    scheduleSave();
+    return;
+  }
+  if (field === 'voiceVol') {
+    const v = clamp((parseFloat(el.value) || 0) / 100, 0, 1);
+    cut.voiceVolume = v;
+    const out = $('[data-vol-out]', card);
+    if (out) out.textContent = Math.round(v * 100) + '%';
+    const player = $('.cut-audio', card);
+    if (player) { try { player.volume = v; } catch (e) {} }
+    scheduleSave();
+    return;
+  }
   if (el.dataset.style) {
     if (!cut.style) return;
     const key = el.dataset.style;
-    const val = key === 'fontSize'
-      ? clamp(parseInt(el.value) || 56, 32, 110)
-      : key === 'effect'
-        ? normalizeEffect(el.value)
-        : Number(el.value) || 700;
-    cut.style[key] = val;
-    const out = $('[data-style-out]', card);
-    if (out && key === 'fontSize') out.textContent = val;
+    const fieldRow = el.closest('.field');
+    const out = fieldRow ? $('[data-style-out]', fieldRow) : null;
+    if (key === 'fontSize') {
+      const v = clamp(parseInt(el.value, 10) || 56, 24, 160);
+      cut.style.fontSize = v;
+      if (out) out.textContent = v;
+    } else if (key === 'outline') {
+      const v = clamp(parseInt(el.value, 10) || 0, 0, 14);
+      cut.style.outline = v;
+      if (out) out.textContent = v;
+    } else if (key === 'color') {
+      cut.style.color = hexColor(el.value, cut.style.color);
+    } else {
+      return;
+    }
     scheduleSave();
     if (!playing) drawAll(currentTime);
   }
@@ -1929,6 +2516,35 @@ cutListEl.addEventListener('change', e => {
   if (!cut) return;
   const el = e.target;
 
+  if (el.dataset.field === 'motion') {
+    cut.motion = el.value ? normalizeMotion(el.value) : null;
+    scheduleSave();
+    if (!playing) drawAll(currentTime);
+    return;
+  }
+  if (el.dataset.field === 'transition') {
+    cut.transition = el.value ? normalizeTransition(el.value) : null;
+    scheduleSave();
+    if (!playing) drawAll(currentTime);
+    return;
+  }
+  if (el.dataset.field === 'sfxId') {
+    // 컷에 볼륨을 따로 정한 적이 없으면 전체 효과음 볼륨을 그대로 따른다.
+    const ownVol = cut.sfx && cut.sfx.volume != null ? clamp(Number(cut.sfx.volume), 0, 1) : null;
+    const vol = ownVol != null ? ownVol : clamp(project.options.sfxVolume ?? 0.6, 0, 1);
+    cut.sfx = el.value ? { id: normalizeSfx(el.value), volume: vol } : null;
+    scheduleSave();
+    if (cut.sfx) {
+      const card2 = $(`.cut-card[data-id="${cut.id}"]`);
+      const range = card2 ? $('[data-field="sfxVol"]', card2) : null;
+      const out = card2 ? $('[data-sfx-out]', card2) : null;
+      if (range) range.value = String(Math.round(vol * 100));
+      if (out) out.textContent = Math.round(vol * 100) + '%';
+    }
+    const label = el.value ? SFX_LABEL[normalizeSfx(el.value)] : '전체 따르기';
+    toast(`이 컷 효과음 · ${label}`);
+    return;
+  }
   if (el.dataset.field === 'autoFit') {
     cut.autoFit = !!el.checked;
     if (cut.autoFit && cut.audio && cut.audio.duration > 0) {
@@ -1957,6 +2573,13 @@ cutListEl.addEventListener('change', e => {
     if (!playing) drawAll(currentTime);
     return;
   }
+  if (el.dataset.style === 'font') {
+    if (!cut.style) return;
+    cut.style.font = normalizeFont(el.value);
+    ensureFontLoaded(el.value).then(() => { if (!playing) drawAll(currentTime); });
+    scheduleSave();
+    return;
+  }
   if (el.dataset.style === 'effect') {
     if (!cut.style) return;
     cut.style.effect = normalizeEffect(el.value);
@@ -1966,13 +2589,7 @@ cutListEl.addEventListener('change', e => {
   }
   if (el.hasAttribute('data-style-enable')) {
     if (el.checked) {
-      cut.style = {
-        fontSize: project.style.fontSize,
-        position: project.style.position,
-        bg: project.style.bg,
-        weight: project.style.weight,
-        effect: normalizeEffect(project.style.effect)
-      };
+      cut.style = normalizeStyle(project.style, DEFAULT_STYLE);
     } else {
       cut.style = null;
     }
@@ -2037,6 +2654,22 @@ cutListEl.addEventListener('click', e => {
     case 'tts': speakCut(cut); break;
     case 'aiVoice': aiVoiceForCut(cut); break;
     case 'removeAudio': removeCutAudio(cut); break;
+    case 'sfxPreview': {
+      const s = sfxFor(cut);
+      if (s.id === 'none') { toast('이 컷에는 효과음이 없어요. 아래에서 먼저 골라 주세요.'); break; }
+      if (previewSfx(s.id, s.volume)) toast(`🔊 ${SFX_LABEL[s.id]}`);
+      else toast('이 브라우저에서는 효과음을 재생할 수 없어요.', 'error');
+      break;
+    }
+    case 'inheritVoice': {
+      cut.voiceRate = null;
+      cut.voiceVolume = null;
+      cut.sfx = null;
+      scheduleSave();
+      renderCutList();
+      toast('이 컷 목소리를 전체 설정으로 되돌렸어요.');
+      break;
+    }
   }
 });
 
@@ -2097,15 +2730,51 @@ function updatePresetButtons() {
 }
 
 function syncProjectUI() {
+  const st = normalizeStyle(project.style, DEFAULT_STYLE);
   $('#projectName').value = project.name || '';
   updatePresetButtons();
-  $('#fontSize').value = String(project.style.fontSize);
-  $('#fontSizeOut').textContent = String(project.style.fontSize);
-  $('#fontWeight').value = String(project.style.weight);
-  setSegmented($('#posSeg'), project.style.position);
-  setSegmented($('#bgSeg'), project.style.bg);
-  $('#effectSelect').value = normalizeEffect(project.style.effect);
-  $('#kenBurns').checked = !!project.options.kenBurns;
+  $('#fontSize').value = String(st.fontSize);
+  $('#fontSizeNum').value = String(st.fontSize);
+  $('#fontSizeOut').textContent = String(st.fontSize);
+  $('#fontWeight').value = String(st.weight);
+  setSegmented($('#posSeg'), st.position);
+  setSegmented($('#alignSeg'), st.align);
+  $('#bgSelect').value = normalizeBg(st.bg);
+  $('#effectSelect').value = normalizeEffect(st.effect);
+  $('#offsetY').value = String(st.offsetY);
+  $('#offsetYOut').textContent = String(Math.round(st.offsetY));
+  $('#textColor').value = st.color;
+  $('#bgColor').value = st.bgColor;
+  $('#outline').value = String(st.outline);
+  $('#outlineOut').textContent = String(Math.round(st.outline));
+  $('#outlineColor').value = st.outlineColor;
+  $('#shadow').value = String(Math.round(st.shadow));
+  $('#shadowOut').textContent = String(Math.round(st.shadow));
+  $$('#fontChips button').forEach(b => b.classList.toggle('on', b.dataset.font === st.font));
+
+  $('#motionSelect').value = normalizeMotion(project.options.motion);
+  $('#motionQuick').value = normalizeMotion(project.options.motion);
+  $('#transitionSelect').value = normalizeTransition(project.options.transition);
+  $('#sfxSelect').value = normalizeSfx(project.options.sfxId);
+  $('#sfxVol').value = String(Math.round((project.options.sfxVolume ?? 0.6) * 100));
+  $('#sfxVolOut').textContent = Math.round((project.options.sfxVolume ?? 0.6) * 100) + '%';
+  $('#voiceRate').value = String(project.options.voiceRate ?? 1);
+  $('#voiceRateOut').textContent = Number(project.options.voiceRate ?? 1).toFixed(2) + 'x';
+  $('#bgmFadeIn').value = String(project.options.bgmFadeIn ?? 0);
+  $('#bgmFadeInOut').textContent = Number(project.options.bgmFadeIn ?? 0).toFixed(1) + '초';
+  $('#bgmFadeOut').value = String(project.options.bgmFadeOut ?? 0);
+  $('#bgmFadeOutOut').textContent = Number(project.options.bgmFadeOut ?? 0).toFixed(1) + '초';
+
+  $('#motionSummary').textContent = MOTION_LABEL[normalizeMotion(project.options.motion)];
+  $('#transitionSummary').textContent = TRANSITION_LABEL[normalizeTransition(project.options.transition)];
+  $('#sfxSummary').textContent = normalizeSfx(project.options.sfxId) === 'none'
+    ? '없음'
+    : `${SFX_LABEL[normalizeSfx(project.options.sfxId)]} · ${Math.round((project.options.sfxVolume ?? 0.6) * 100)}%`;
+  $('#fontSummary').textContent = `${FONT_DEFS[st.font].label} · ${st.fontSize}`;
+  $('#posSummary').textContent = `${st.position === 'top' ? '상단' : st.position === 'center' ? '중앙' : '하단'} · ${st.align === 'left' ? '왼쪽' : st.align === 'right' ? '오른쪽' : '가운데'}`;
+  $('#decoSummary').textContent = `${st.color} · 외곽선 ${st.outline} · 그림자 ${Math.round(st.shadow)}`;
+  $('#voiceSummary').textContent = `${Number(project.options.voiceRate ?? 1).toFixed(2)}x · ${Math.round((project.options.voiceVolume ?? 1) * 100)}%`;
+
   $('#resSelect').value = project.options.resolution || '1080x1920';
   $('#stageRes').textContent = (project.options.resolution || '1080x1920').replace('x', '×');
   $('#bgmVol').value = String(Math.round((project.options.bgmVolume ?? 0.18) * 100));
@@ -2120,9 +2789,49 @@ function syncProjectUI() {
   renderBgmUI();
 }
 
+/* ---------- 도구 탭 ---------- */
+function selectToolTab(name) {
+  $$('.tool-tabs button').forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $$('.tool-panel').forEach(p => { p.hidden = p.dataset.panel !== name; });
+}
+function syncTopbarHeight() {
+  const bar = $('.topbar');
+  if (bar) document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+}
+
+function syncDecoSummary() {
+  const el = $('#decoSummary');
+  if (!el) return;
+  el.textContent = `${project.style.color} · 외곽선 ${project.style.outline} · 그림자 ${Math.round(project.style.shadow)}`;
+}
+
+function commitStyle(patch) {
+  Object.assign(project.style, normalizeStyle({ ...project.style, ...patch }, DEFAULT_STYLE));
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+}
+
 $('#fontSize').addEventListener('input', e => {
-  project.style.fontSize = clamp(parseInt(e.target.value) || 56, 32, 110);
-  $('#fontSizeOut').textContent = String(project.style.fontSize);
+  const v = clamp(parseInt(e.target.value, 10) || 56, 24, 160);
+  project.style.fontSize = v;
+  $('#fontSizeOut').textContent = String(v);
+  $('#fontSizeNum').value = String(v);
+  $('#fontSummary').textContent = `${FONT_DEFS[normalizeFont(project.style.font)].label} · ${v}`;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#fontSizeNum').addEventListener('input', e => {
+  const raw = parseInt(e.target.value, 10);
+  if (!Number.isFinite(raw)) return;
+  const v = clamp(raw, 24, 160);
+  project.style.fontSize = v;
+  $('#fontSize').value = String(v);
+  $('#fontSizeOut').textContent = String(v);
+  $('#fontSummary').textContent = `${FONT_DEFS[normalizeFont(project.style.font)].label} · ${v}`;
   scheduleSave();
   if (!playing) drawAll(currentTime);
 });
@@ -2131,19 +2840,104 @@ $('#fontWeight').addEventListener('change', e => {
   scheduleSave();
   if (!playing) drawAll(currentTime);
 });
+$('#fontChips').addEventListener('click', e => {
+  const b = e.target.closest('button[data-font]');
+  if (!b) return;
+  project.style.font = normalizeFont(b.dataset.font);
+  $$('#fontChips button').forEach(x => x.classList.toggle('on', x === b));
+  $('#fontSummary').textContent = `${FONT_DEFS[project.style.font].label} · ${project.style.fontSize}`;
+  scheduleSave();
+  ensureFontLoaded(project.style.font).then(ok => {
+    if (!playing) drawAll(currentTime);
+    if (project.style.font !== 'system' && !ok) toast('글꼴을 불러오지 못했어요. 네트워크를 확인해 주세요.', 'error');
+  });
+  if (!playing) drawAll(currentTime);
+});
 $('#posSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-value]');
   if (!b) return;
   project.style.position = b.dataset.value;
   setSegmented($('#posSeg'), project.style.position);
+  $('#posSummary').textContent = `${b.textContent} · ${project.style.align === 'left' ? '왼쪽' : project.style.align === 'right' ? '오른쪽' : '가운데'}`;
   scheduleSave();
   if (!playing) drawAll(currentTime);
 });
-$('#bgSeg').addEventListener('click', e => {
+$('#alignSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-value]');
   if (!b) return;
-  project.style.bg = b.dataset.value;
-  setSegmented($('#bgSeg'), project.style.bg);
+  project.style.align = normalizeAlign(b.dataset.value);
+  setSegmented($('#alignSeg'), project.style.align);
+  $('#posSummary').textContent = `${project.style.position === 'top' ? '상단' : project.style.position === 'center' ? '중앙' : '하단'} · ${b.textContent}`;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#offsetY').addEventListener('input', e => {
+  const v = clamp(parseFloat(e.target.value) || 0, -30, 30);
+  project.style.offsetY = v;
+  $('#offsetYOut').textContent = String(Math.round(v));
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#bgSelect').addEventListener('change', e => {
+  project.style.bg = normalizeBg(e.target.value);
+  // 흰색 박스에서는 흰 글씨가 보이지 않으니 색을 자동으로 바꿔 준다.
+  if (project.style.bg === 'light' && project.style.color === '#ffffff') {
+    project.style.color = '#111318';
+    $('#textColor').value = '#111318';
+  } else if (project.style.bg !== 'light' && project.style.color === '#111318') {
+    project.style.color = '#ffffff';
+    $('#textColor').value = '#ffffff';
+  }
+  $('#decoSummary').textContent = `${project.style.color} · 외곽선 ${project.style.outline} · 그림자 ${Math.round(project.style.shadow)}`;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#textColor').addEventListener('input', e => {
+  project.style.color = hexColor(e.target.value, '#ffffff');
+  syncDecoSummary();
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#textSwatches').addEventListener('click', e => {
+  const b = e.target.closest('button[data-color]');
+  if (!b) return;
+  project.style.color = hexColor(b.dataset.color, '#ffffff');
+  $('#textColor').value = project.style.color;
+  syncDecoSummary();
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#outline').addEventListener('input', e => {
+  const v = clamp(parseInt(e.target.value, 10) || 0, 0, 14);
+  project.style.outline = v;
+  $('#outlineOut').textContent = String(v);
+  $('#decoSummary').textContent = `${project.style.color} · 외곽선 ${v} · 그림자 ${Math.round(project.style.shadow)}`;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#outlineColor').addEventListener('input', e => {
+  project.style.outlineColor = hexColor(e.target.value, '#000000');
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#outlineSwatches').addEventListener('click', e => {
+  const b = e.target.closest('button[data-color]');
+  if (!b) return;
+  project.style.outlineColor = hexColor(b.dataset.color, '#000000');
+  $('#outlineColor').value = project.style.outlineColor;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#shadow').addEventListener('input', e => {
+  const v = clamp(parseInt(e.target.value, 10) || 0, 0, 100);
+  project.style.shadow = v;
+  $('#shadowOut').textContent = String(v);
+  $('#decoSummary').textContent = `${project.style.color} · 외곽선 ${project.style.outline} · 그림자 ${v}`;
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#bgColor').addEventListener('input', e => {
+  project.style.bgColor = hexColor(e.target.value, '#ffd54a');
   scheduleSave();
   if (!playing) drawAll(currentTime);
 });
@@ -2153,10 +2947,58 @@ $('#effectSelect').addEventListener('change', e => {
   if (!playing) drawAll(currentTime);
   toast(`자막 효과 · ${EFFECT_LABEL[project.style.effect]}`);
 });
-$('#kenBurns').addEventListener('change', e => {
-  project.options.kenBurns = !!e.target.checked;
+
+function setGlobalMotion(v) {
+  project.options.motion = normalizeMotion(v);
+  project.options.kenBurns = project.options.motion !== 'none';
+  $('#motionSelect').value = project.options.motion;
+  $('#motionQuick').value = project.options.motion;
+  $('#motionSummary').textContent = MOTION_LABEL[project.options.motion];
   scheduleSave();
-  recalcTimeline();
+  if (!playing) drawAll(currentTime);
+}
+$('#motionSelect').addEventListener('change', e => setGlobalMotion(e.target.value));
+$('#motionQuick').addEventListener('change', e => setGlobalMotion(e.target.value));
+$('#transitionSelect').addEventListener('change', e => {
+  project.options.transition = normalizeTransition(e.target.value);
+  $('#transitionSummary').textContent = TRANSITION_LABEL[project.options.transition];
+  scheduleSave();
+  if (!playing) drawAll(currentTime);
+});
+$('#sfxSelect').addEventListener('change', e => {
+  project.options.sfxId = normalizeSfx(e.target.value);
+  $('#sfxSummary').textContent = project.options.sfxId === 'none'
+    ? '없음'
+    : `${SFX_LABEL[project.options.sfxId]} · ${Math.round((project.options.sfxVolume ?? 0.6) * 100)}%`;
+  scheduleSave();
+  if (project.options.sfxId !== 'none') previewSfx(project.options.sfxId, project.options.sfxVolume ?? 0.6);
+});
+$('#sfxVol').addEventListener('input', e => {
+  project.options.sfxVolume = clamp((parseFloat(e.target.value) || 0) / 100, 0, 1);
+  $('#sfxVolOut').textContent = Math.round(project.options.sfxVolume * 100) + '%';
+  $('#sfxSummary').textContent = normalizeSfx(project.options.sfxId) === 'none'
+    ? '없음'
+    : `${SFX_LABEL[project.options.sfxId]} · ${Math.round(project.options.sfxVolume * 100)}%`;
+  scheduleSave();
+});
+$('#btnSfxPreview').addEventListener('click', () => {
+  const id = normalizeSfx($('#sfxSelect').value);
+  if (id === 'none') { toast('먼저 효과음을 골라 주세요.'); return; }
+  if (!previewSfx(id, (parseFloat($('#sfxVol').value) || 0) / 100)) toast('이 브라우저에서는 효과음을 재생할 수 없어요.', 'error');
+});
+$('#voiceRate').addEventListener('input', e => {
+  const v = clamp(parseFloat(e.target.value) || 1, 0.8, 1.5);
+  project.options.voiceRate = v;
+  $('#voiceRateOut').textContent = v.toFixed(2) + 'x';
+  $('#voiceSummary').textContent = `${v.toFixed(2)}x · ${Math.round((project.options.voiceVolume ?? 1) * 100)}%`;
+  // 배속을 바꿔도 ‘음성 길이에 맞추기’가 켜진 컷은 길이가 어긋나지 않게 자동으로 다시 맞춘다.
+  project.cuts.forEach(cut => {
+    if (cut.autoFit && cut.audio && cut.audio.duration > 0) {
+      cut.duration = clamp(Math.round((tonalDuration(cut.audio.duration, cut) + 0.25) * 10) / 10, 0.5, 120);
+    }
+  });
+  scheduleSave();
+  renderCutList();
 });
 $('#resSelect').addEventListener('change', e => {
   project.options.resolution = e.target.value;
@@ -2256,20 +3098,56 @@ $('#bgmVol').addEventListener('input', e => {
 $('#voiceVol').addEventListener('input', e => {
   project.options.voiceVolume = clamp((parseFloat(e.target.value) || 0) / 100, 0, 1);
   $('#voiceVolOut').textContent = Math.round(project.options.voiceVolume * 100) + '%';
+  $('#voiceSummary').textContent = `${Number(project.options.voiceRate ?? 1).toFixed(2)}x · ${Math.round(project.options.voiceVolume * 100)}%`;
+  project.cuts.forEach(cut => {
+    if (cut.voiceVolume != null) return;
+    const card = $(`.cut-card[data-id="${cut.id}"]`);
+    const player = card ? $('.cut-audio', card) : null;
+    if (player) { try { player.volume = project.options.voiceVolume; } catch (err) {} }
+  });
+  scheduleSave();
+});
+$('#bgmFadeIn').addEventListener('input', e => {
+  project.options.bgmFadeIn = clamp(parseFloat(e.target.value) || 0, 0, 3);
+  $('#bgmFadeInOut').textContent = project.options.bgmFadeIn.toFixed(1) + '초';
+  scheduleSave();
+});
+$('#bgmFadeOut').addEventListener('input', e => {
+  project.options.bgmFadeOut = clamp(parseFloat(e.target.value) || 0, 0, 3);
+  $('#bgmFadeOutOut').textContent = project.options.bgmFadeOut.toFixed(1) + '초';
   scheduleSave();
 });
 
 /* ------------------------------------------------------------
    13. 저장 (localStorage) · 복원
    ------------------------------------------------------------ */
-function serializeProject() {
+function normalizeOptions(raw) {
+  const o = raw || {};
+  const num = (v, fallback) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : fallback);
   return {
-    v: 1,
+    kenBurns: o.kenBurns !== false,
+    motion: o.motion ? normalizeMotion(o.motion) : (o.kenBurns === false ? 'none' : DEFAULT_OPTIONS.motion),
+    transition: o.transition ? normalizeTransition(o.transition) : DEFAULT_OPTIONS.transition,
+    resolution: o.resolution === '720x1280' ? '720x1280' : '1080x1920',
+    bgmVolume: clamp(num(o.bgmVolume, DEFAULT_OPTIONS.bgmVolume), 0, 1),
+    voiceVolume: clamp(num(o.voiceVolume, DEFAULT_OPTIONS.voiceVolume), 0, 1),
+    voiceRate: clamp(num(o.voiceRate, DEFAULT_OPTIONS.voiceRate), 0.8, 1.5),
+    sfxId: normalizeSfx(o.sfxId),
+    sfxVolume: clamp(num(o.sfxVolume, DEFAULT_OPTIONS.sfxVolume), 0, 1),
+    bgmFadeIn: clamp(num(o.bgmFadeIn, 0), 0, 3),
+    bgmFadeOut: clamp(num(o.bgmFadeOut, 0), 0, 3)
+  };
+}
+
+function serializeProject() {
+  const baseStyle = normalizeStyle(project.style, DEFAULT_STYLE);
+  return {
+    v: 2,
     savedAt: Date.now(),
     preset: project.preset || null,
     name: project.name,
-    style: { ...project.style },
-    options: { ...project.options },
+    style: baseStyle,
+    options: normalizeOptions(project.options),
     tts: { ...project.tts },
     aiVoice: { voice: project.aiVoice ? project.aiVoice.voice : DEFAULT_AI.voice,
       speed: project.aiVoice ? project.aiVoice.speed : DEFAULT_AI.speed,
@@ -2284,7 +3162,14 @@ function serializeProject() {
       image: c.image ? { ...c.image } : null,
       audio: c.audio ? { ...c.audio } : null,
       tone: normalizeTone(c.tone),
-      style: c.style ? { ...c.style } : null
+      style: c.style ? normalizeStyle(c.style, baseStyle) : null,
+      motion: c.motion ? normalizeMotion(c.motion) : null,
+      transition: c.transition ? normalizeTransition(c.transition) : null,
+      sfx: c.sfx && c.sfx.id
+        ? { id: normalizeSfx(c.sfx.id), volume: clamp(Number(c.sfx.volume != null ? c.sfx.volume : 0.6), 0, 1) }
+        : null,
+      voiceRate: c.voiceRate != null && Number.isFinite(parseFloat(c.voiceRate)) ? clamp(parseFloat(c.voiceRate), 0.8, 1.5) : null,
+      voiceVolume: c.voiceVolume != null && Number.isFinite(parseFloat(c.voiceVolume)) ? clamp(parseFloat(c.voiceVolume), 0, 1) : null
     }))
   };
 }
@@ -2339,26 +3224,10 @@ function loadSaved() {
 
 function normalizeProject(raw) {
   const style = raw.style || {};
-  const options = raw.options || {};
-  const tts = raw.tts || {};
-  const normStyle = {
-    fontSize: clamp(parseInt(style.fontSize) || DEFAULT_STYLE.fontSize, 32, 110),
-    position: ['top', 'center', 'bottom'].includes(style.position) ? style.position : DEFAULT_STYLE.position,
-    bg: ['dark', 'light', 'none'].includes(style.bg) ? style.bg : DEFAULT_STYLE.bg,
-    weight: STYLE_WEIGHTS.includes(Number(style.weight)) ? Number(style.weight) : DEFAULT_STYLE.weight,
-    effect: normalizeEffect(style.effect)
-  };
+  const normStyle = normalizeStyle(style, DEFAULT_STYLE);
   const cuts = (Array.isArray(raw.cuts) ? raw.cuts : []).map(c => {
-    let st = null;
-    if (c.style && typeof c.style === 'object') {
-      st = {
-        fontSize: clamp(parseInt(c.style.fontSize) || normStyle.fontSize, 32, 110),
-        position: ['top', 'center', 'bottom'].includes(c.style.position) ? c.style.position : normStyle.position,
-        bg: ['dark', 'light', 'none'].includes(c.style.bg) ? c.style.bg : normStyle.bg,
-        weight: STYLE_WEIGHTS.includes(Number(c.style.weight)) ? Number(c.style.weight) : normStyle.weight,
-        effect: normalizeEffect(c.style.effect)
-      };
-    }
+    const st = c.style && typeof c.style === 'object' ? normalizeStyle(c.style, normStyle) : null;
+    const sfxVol = c.sfx && Number.isFinite(parseFloat(c.sfx.volume)) ? parseFloat(c.sfx.volume) : 0.6;
     return {
       id: c.id || uid('cut'),
       text: typeof c.text === 'string' ? c.text : '',
@@ -2371,27 +3240,23 @@ function normalizeProject(raw) {
       audio: c.audio && c.audio.key
         ? { key: c.audio.key, name: c.audio.name || '음성', mime: c.audio.mime || '', duration: parseFloat(c.audio.duration) || 0 }
         : null,
-      style: st
+      style: st,
+      motion: c.motion ? normalizeMotion(c.motion) : null,
+      transition: c.transition ? normalizeTransition(c.transition) : null,
+      sfx: c.sfx && c.sfx.id ? { id: normalizeSfx(c.sfx.id), volume: clamp(sfxVol, 0, 1) } : null,
+      voiceRate: c.voiceRate != null && Number.isFinite(parseFloat(c.voiceRate)) ? clamp(parseFloat(c.voiceRate), 0.8, 1.5) : null,
+      voiceVolume: c.voiceVolume != null && Number.isFinite(parseFloat(c.voiceVolume)) ? clamp(parseFloat(c.voiceVolume), 0, 1) : null
     };
   });
   return {
     preset: ['sample-01', 'sample-02'].includes(raw.preset) ? raw.preset : null,
     name: String(raw.name || '내 쇼츠').slice(0, 60),
     style: normStyle,
-    options: {
-      kenBurns: options.kenBurns !== false,
-      resolution: options.resolution === '720x1280' ? '720x1280' : '1080x1920',
-      bgmVolume: Number.isFinite(parseFloat(options.bgmVolume))
-        ? clamp(parseFloat(options.bgmVolume), 0, 1)
-        : DEFAULT_OPTIONS.bgmVolume,
-      voiceVolume: Number.isFinite(parseFloat(options.voiceVolume))
-        ? clamp(parseFloat(options.voiceVolume), 0, 1)
-        : DEFAULT_OPTIONS.voiceVolume
-    },
+    options: normalizeOptions(raw.options),
     tts: {
-      voiceURI: String(tts.voiceURI || ''),
-      rate: clamp(parseFloat(tts.rate) || 1, 0.8, 1.5),
-      pitch: clamp(parseFloat(tts.pitch) || 1, 0.5, 2)
+      voiceURI: String((raw.tts || {}).voiceURI || ''),
+      rate: clamp(parseFloat((raw.tts || {}).rate) || 1, 0.8, 1.5),
+      pitch: clamp(parseFloat((raw.tts || {}).pitch) || 1, 0.5, 2)
     },
     aiVoice: {
       voice: AI_VOICE_IDS.includes(raw.aiVoice && raw.aiVoice.voice) ? raw.aiVoice.voice : DEFAULT_AI.voice,
@@ -2434,8 +3299,8 @@ async function buildProjectJson() {
     savedAt: new Date().toISOString(),
     preset: project.preset || null,
     name: project.name,
-    style: { ...project.style },
-    options: { ...project.options },
+    style: normalizeStyle(project.style, DEFAULT_STYLE),
+    options: normalizeOptions(project.options),
     tts: { ...project.tts },
     aiVoice: { ...aiSettings() },
     bgm: null,
@@ -2447,7 +3312,12 @@ async function buildProjectJson() {
       duration: cut.duration,
       autoFit: cut.autoFit,
       tone: normalizeTone(cut.tone),
-      style: cut.style ? { ...cut.style } : null,
+      style: cut.style ? normalizeStyle(cut.style, project.style) : null,
+      motion: cut.motion || null,
+      transition: cut.transition || null,
+      sfx: cut.sfx ? { id: normalizeSfx(cut.sfx.id), volume: clamp(Number(cut.sfx.volume ?? 0.6), 0, 1) } : null,
+      voiceRate: cut.voiceRate != null ? cut.voiceRate : null,
+      voiceVolume: cut.voiceVolume != null ? cut.voiceVolume : null,
       image: null,
       audio: null
     };
@@ -2682,6 +3552,9 @@ async function exportVideo() {
 
   pause();
   stopTts();
+
+  // 내보내기 첫 프레임부터 바른 글꼴로 그려지도록 미리 불러온다.
+  try { await ensureAllFontsLoaded(); } catch (e) {}
 
   const [W, H] = currentResolution();
   const total = totalDuration();
@@ -2968,6 +3841,18 @@ async function init() {
   setupMiniPreview();
   setupKeyboard();
   refreshVoices();
+  selectToolTab('screen');
+  syncTopbarHeight();
+  window.addEventListener('resize', syncTopbarHeight);
+
+  // 글꼴이 늦게 도착하면 한 번 다시 그려 정확한 글꼴로 보여 준다.
+  ensureAllFontsLoaded().then(() => { if (!playing) drawAll(currentTime); });
+  if (document.fonts && document.fonts.addEventListener) {
+    document.fonts.addEventListener('loadingdone', () => { if (!playing) drawAll(currentTime); });
+  }
+  const firstKey = normalizeFont(project.style.font);
+  if (firstKey !== 'system') ensureFontLoaded(firstKey).then(() => { if (!playing) drawAll(currentTime); });
+
   if ('speechSynthesis' in window) {
     try { speechSynthesis.onvoiceschanged = refreshVoices; } catch (e) {}
     setTimeout(refreshVoices, 400);
@@ -2981,6 +3866,16 @@ async function init() {
   window.addEventListener('beforeunload', () => { clearTimeout(saveTimer); saveNow(); });
 }
 
+/* 도구 탭 · 상단바 높이 */
+$$('.tool-tabs button').forEach(b => {
+  b.addEventListener('click', () => selectToolTab(b.dataset.tab));
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target && /input|textarea|select/i.test(e.target.tagName || '')) return;
+  if (e.altKey && /^[1-3]$/.test(e.key)) selectToolTab(['screen', 'text', 'audio'][Number(e.key) - 1]);
+});
+
 init().catch(err => {
   console.error(err);
   toast('앱을 시작하지 못했어요. 페이지를 새로고침해 주세요.', 'error');
@@ -2988,10 +3883,61 @@ init().catch(err => {
 
 /* 테스트·디버깅용 최소 핸들 (읽기 전용) */
 window.__shortsMaker = {
-  version: '1.2.0',
+  version: '2.0.0',
   getProject: () => serializeProject(),
   getState: () => ({ currentTime, playing, exporting, total: totalDuration(), cuts: project.cuts.length }),
   getAiVoice: () => ({ ...aiSettings(), hasKey: !!effectiveKey(), busy: aiBusyCuts.size, batch: !!(aiBatch && aiBatch.running) }),
-  getLastExport: () => lastExportDiag
+  getLastExport: () => lastExportDiag,
+  getFonts: () => FONT_KEYS.reduce((o, k) => { o[k] = isFontReady(k); return o; }, {}),
+  getSfx: () => ({
+    keys: SFX_KEYS.slice(),
+    durations: { ...SFX_DUR },
+    buffers: Object.fromEntries(SFX_KEYS.filter(k => k !== 'none').map(k => {
+      const ctx = getAudioCtx();
+      const buf = ctx ? sfxBuffer(ctx, k) : null;
+      return [k, buf ? { duration: Number(buf.duration.toFixed(3)), sampleRate: buf.sampleRate } : null];
+    }))
+  }),
+  drawAt: (t, w = PREVIEW_W, h = PREVIEW_H) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    drawFrame(t, c.getContext('2d'), w, h);
+    return c.toDataURL('image/png');
+  },
+  lineAt: (t, y) => {
+    const c = document.createElement('canvas');
+    c.width = PREVIEW_W; c.height = PREVIEW_H;
+    const cx = c.getContext('2d');
+    drawFrame(t, cx, PREVIEW_W, PREVIEW_H);
+    const row = cx.getImageData(0, Math.round(y), PREVIEW_W, 2).data;
+    let lit = 0;
+    for (let i = 0; i < row.length; i += 4) {
+      if (row[i] > 200 && row[i + 1] > 200 && row[i + 2] > 200) lit++;
+    }
+    return lit;
+  },
+  /* 내보내기와 같은 경로(scheduleAudio)로 오디오 믹스를 오프라인 렌더링해
+     0.1초당 RMS를 돌려준다. 효과음·목소리 볼륨이 실제로 섞이는지 검사할 때 쓴다. */
+  mixProbe: async (fromTime = 0) => {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return null;
+    const total = Math.max(0.5, totalDuration());
+    const octx = new OAC(1, Math.ceil(total * 44100), 44100);
+    const cache = new Map();
+    await decodeAllInto(octx, cache);
+    const master = octx.createGain();
+    master.connect(octx.destination);
+    scheduleAudio(octx, master, fromTime, cache, []);
+    const buf = await octx.startRendering();
+    const d = buf.getChannelData(0);
+    const win = Math.floor(44100 * 0.1);
+    const rms = [];
+    for (let i = 0; i + win <= d.length; i += win) {
+      let s = 0;
+      for (let j = 0; j < win; j++) s += d[i + j] * d[i + j];
+      rms.push(Number(Math.sqrt(s / win).toFixed(4)));
+    }
+    return { duration: Number(buf.duration.toFixed(3)), rms };
+  }
 };
 })();

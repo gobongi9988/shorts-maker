@@ -201,6 +201,56 @@ input[type=range]{accent-color:var(--accent)}
 .result-card video{display:block;width:auto;max-width:100%;max-height:320px;margin:0 auto 9px;background:#000;border-radius:10px}
 .result-card .btn{width:100%}
 
+/* ---------- 도구 탭 ---------- */
+.tool-tabs{
+  display:flex;gap:4px;padding:4px;
+  background:var(--panel);border:1px solid var(--line);border-radius:13px;
+  position:sticky;top:calc(var(--topbar-h, 60px) + 6px);z-index:20;
+  backdrop-filter:blur(10px);
+}
+.tool-tabs button{
+  flex:1;min-width:0;height:36px;padding:0 6px;border:0;border-radius:9px;
+  background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;
+  white-space:nowrap;letter-spacing:-.02em;
+  transition:background .14s,color .14s;
+}
+.tool-tabs button:hover{background:#1d222b;color:var(--text)}
+.tool-tabs button.on{background:var(--accent);color:var(--accent-ink);font-weight:800}
+.tool-panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tool-panel[hidden]{display:none}
+
+/* ---------- 폰트 칩 ---------- */
+.font-chips{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px}
+.font-chips button{
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  padding:8px 10px;border-radius:10px;text-align:left;
+  background:#0e1015;border:1px solid #293040;color:var(--text);
+  font-size:19px;line-height:1.15;font-weight:700;
+  transition:border-color .12s,background .12s;
+}
+.font-chips button span{
+  font-family:var(--font);font-size:10px;font-weight:600;color:var(--muted-2);letter-spacing:-.01em;
+}
+.font-chips button:hover{background:#141821;border-color:#3a4457}
+.font-chips button.on{border-color:var(--accent);background:#262314;box-shadow:0 0 0 1px rgba(255,230,117,.35) inset}
+.font-chips button.on span{color:var(--accent)}
+
+/* ---------- 색 선택 ---------- */
+.color-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.color-row input[type=color]{
+  width:42px;height:34px;padding:2px;border-radius:9px;cursor:pointer;
+  background:#0e1015;border:1px solid #293040;
+}
+.swatches{display:flex;gap:5px;flex-wrap:wrap}
+.swatches button{
+  width:22px;height:22px;padding:0;border-radius:50%;
+  background:var(--c,#fff);border:1px solid rgba(255,255,255,.28);
+  transition:transform .1s,box-shadow .12s;
+}
+.swatches button:hover{transform:scale(1.12)}
+.swatches button.on{box-shadow:0 0 0 2px var(--accent)}
+.tiny.inline{margin:0}
+
 /* ---------- 패널 ---------- */
 .panel{
   background:var(--panel);
@@ -407,6 +457,20 @@ input[type=range]{accent-color:var(--accent)}
 }
 .style-body{margin-top:8px;padding:9px;border:1px solid #242a36;border-radius:10px;background:#0d0f14}
 .style-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mini-title{
+  font-size:10.5px;font-weight:800;color:#aeb6c3;letter-spacing:.02em;
+  margin:2px 0 7px;
+}
+.mini-title + .style-grid{margin-bottom:10px}
+.style-sep{
+  height:1px;background:#20242e;margin:11px 0 9px;
+}
+.style-grid .field{font-size:11.5px}
+.style-grid .field select{height:31px;font-size:12px}
+.style-grid .field output{font-size:11px}
+.cut-style > summary .tag.on{border-color:#5d5430}
+.chip.small{height:24px;padding:0 8px;font-size:10.5px;border-radius:6px}
+.voice-note{font-size:10px;color:var(--muted-2);margin-top:3px}
 
 .empty-cuts{
   text-align:center;padding:22px 14px;border:1px dashed #2a303c;border-radius:12px;
@@ -442,7 +506,7 @@ body.is-exporting .top-actions{opacity:.55;pointer-events:none}
 /* ---------- 미니 미리보기 ---------- */
 .mini-preview{
   display:none;position:fixed;right:9px;bottom:calc(10px + env(safe-area-inset-bottom));
-  width:68px;z-index:70;border:1px solid #3a4150;border-radius:9px;
+  width:56px;z-index:70;border:1px solid #3a4150;border-radius:8px;
   overflow:hidden;background:#000;box-shadow:0 10px 26px rgba(0,0,0,.55);
   pointer-events:none;
 }
@@ -470,6 +534,11 @@ body.is-exporting .top-actions{opacity:.55;pointer-events:none}
 }
 @media (max-width:560px){
   body{font-size:13.5px}
+  .tool-tabs{top:calc(var(--topbar-h, 56px) + 4px);gap:3px}
+  .tool-tabs button{height:34px;font-size:11.5px;padding:0 3px}
+  .font-chips{grid-template-columns:1fr 1fr;gap:6px}
+  .font-chips button{font-size:17px;padding:7px 8px}
+  .style-grid{gap:8px}
   .topbar{gap:8px}
   .brand-mark{width:32px;height:32px;font-size:16px;border-radius:9px}
   .brand-text strong{font-size:14.5px}
